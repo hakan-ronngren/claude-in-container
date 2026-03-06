@@ -19,8 +19,12 @@ PROJECT_NAME="$(basename "$PROJECT_DIR")"
 # Always remove and recreate the container (volumes persist the important data)
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
-# Build the image to ensure it's up to date
-docker build -t "$IMAGE_NAME" "$DOCKERFILE_DIR"
+# Build the image if the Dockerfile has changed since the last build
+LAST_BUILD="$DOCKERFILE_DIR/.last-build"
+if [ "$DOCKERFILE_DIR/Dockerfile" -nt "$LAST_BUILD" ]; then
+    docker build -t "$IMAGE_NAME" "$DOCKERFILE_DIR"
+    touch "$LAST_BUILD"
+fi
 
 # Create the container
 docker run -d \

@@ -5,7 +5,7 @@
 set -e
 
 # Configuration
-DOCKERFILE_DIR="$HOME/myproj/claude-in-container"
+DOCKERFILE_DIR="$HOME/claude-in-container"
 IMAGE_NAME="claude-in-container"
 CONTAINER_NAME="claude-dev"
 

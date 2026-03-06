@@ -19,14 +19,14 @@ On each invocation, any existing container is removed and a new one is created. 
 
 ## Setup
 
-Place `claude-in-container` (the script) and `Dockerfile` in a directory on your PATH. The script hard-codes `DOCKERFILE_DIR="$HOME/myproj/claude-in-container"` — update this path to match where you put the files.
+Place `claude-in-container` (the script) and `Dockerfile` in a directory on your PATH. The script hard-codes `DOCKERFILE_DIR="$HOME/claude-in-container"` — update this path to match where you put the files.
 
 ## Rebuilding the image
 
 The script always runs `docker build` on each invocation, so the image is kept up to date automatically. Docker's layer cache makes this fast when nothing has changed. To force a full rebuild without cache:
 
 ```bash
-docker build --no-cache -t claude-in-container ~/myproj/claude-in-container
+docker build --no-cache -t claude-in-container ~/claude-in-container
 ```
 
 ## Reaching host services from inside the container

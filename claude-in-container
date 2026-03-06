@@ -44,4 +44,9 @@ sleep 0.5
 # Execute Claude in the container, passing any command-line arguments
 # We do this as a separate command because `docker exec` gives a better interactive
 # experience than `docker run` for the actual Claude command
-docker exec -it -u me -e HOME=/home/me -w "/home/me/$PROJECT_NAME" "$CONTAINER_NAME" /home/me/.local/bin/claude "$@"
+docker exec -it \
+    -u me \
+    -e HOME=/home/me -e TERM -e COLORTERM \
+    -w "/home/me/$PROJECT_NAME" \
+    "$CONTAINER_NAME" \
+    /home/me/.local/bin/claude "$@"

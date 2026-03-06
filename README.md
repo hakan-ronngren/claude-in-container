@@ -2,6 +2,11 @@
 
 Runs Claude Code in a container, persisting your credentials, preferences, and session information in a volume, separate from your home directory on the host system.
 
+## System requirements
+
+- Docker
+- A valid Claude subscription
+
 ## Installation
 
 1. Clone this repository in your home directory

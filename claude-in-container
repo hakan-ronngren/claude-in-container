@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# claude-in-container - Start Claude Code in a Docker container
+
+set -e
+
+# Configuration
+DOCKERFILE_DIR="$HOME/myproj/claude-in-container"
+IMAGE_NAME="claude-in-container"
+CONTAINER_NAME="claude-dev"
+
+# Named volume for persistence
+CLAUDE_HOME_VOLUME="claude-in-container_claude-home"
+
+# Current working directory (the project to mount)
+PROJECT_DIR="$(pwd)"
+PROJECT_NAME="$(basename "$PROJECT_DIR")"
+
+# Always remove and recreate the container (volumes persist the important data)
+docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
+# Build the image to ensure it's up to date
+docker build -t "$IMAGE_NAME" "$DOCKERFILE_DIR"
+
+# Create the container
+docker run -d \
+    --name "$CONTAINER_NAME" \
+    -e HOME=/home/me \
+    -e TEST_HOST=host.docker.internal \
+    --add-host host.docker.internal:host-gateway \
+    -v "$CLAUDE_HOME_VOLUME:/home/me" \
+    -v "$PROJECT_DIR:/home/me/$PROJECT_NAME" \
+    -w "/home/me/$PROJECT_NAME" \
+    "$IMAGE_NAME" \
+    -c 'while true; do sleep 1000; done' >/dev/null
+
+# Wait a moment for container to be fully running
+sleep 0.5
+
+# Execute Claude in the container, passing any command-line arguments
+# We do this as a separate command because `docker exec` gives a better interactive
+# experience than `docker run` for the actual Claude command
+docker exec -it -u me -e HOME=/home/me -w "/home/me/$PROJECT_NAME" "$CONTAINER_NAME" /home/me/.local/bin/claude "$@"

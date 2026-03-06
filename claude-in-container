@@ -26,11 +26,21 @@ if [ "$DOCKERFILE_DIR/Dockerfile" -nt "$LAST_BUILD" ]; then
     touch "$LAST_BUILD"
 fi
 
+# Carry over git identity from host
+GIT_AUTHOR_EMAIL="$(git config user.email)"
+GIT_AUTHOR_NAME="$(git config user.name)"
+GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+
 # Create the container
 docker run -d \
     --name "$CONTAINER_NAME" \
     -e HOME=/home/me \
     -e TEST_HOST=host.docker.internal \
+    -e GIT_AUTHOR_EMAIL="$GIT_AUTHOR_EMAIL" \
+    -e GIT_AUTHOR_NAME="$GIT_AUTHOR_NAME" \
+    -e GIT_COMMITTER_EMAIL="$GIT_COMMITTER_EMAIL" \
+    -e GIT_COMMITTER_NAME="$GIT_COMMITTER_NAME" \
     --add-host host.docker.internal:host-gateway \
     -v "$CLAUDE_HOME_VOLUME:/home/me" \
     -v "$PROJECT_DIR:/home/me/$PROJECT_NAME" \

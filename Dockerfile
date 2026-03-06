@@ -7,11 +7,14 @@ RUN apt-get update && apt-get install -y \
     gh \
     git \
     jq \
+    make \
+    sudo \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Create user 'me' with bash as default shell
-RUN useradd -m -s /bin/bash me
+# Create user 'me' with bash as default shell and passwordless sudo
+RUN useradd -m -s /bin/bash me \
+    && echo 'me ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/me
 
 # Switch to user 'me'
 USER me
@@ -25,8 +28,10 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | b
 # Users can install additional versions using nvm based on .nvmrc in their projects
 RUN . "$NVM_DIR/nvm.sh" && nvm install --lts && nvm use --lts
 
-# Install pnpm globally
-RUN . "$NVM_DIR/nvm.sh" && npm install -g pnpm
+# Install pnpm system-wide (outside the home volume) so it's always available
+RUN sudo mkdir -p /usr/local/lib/pnpm && sudo chown me /usr/local/lib/pnpm \
+    && curl -fsSL https://get.pnpm.io/install.sh | SHELL=/bin/bash PNPM_HOME=/usr/local/lib/pnpm sh - \
+    && sudo ln -sf /usr/local/lib/pnpm/pnpm /usr/local/bin/pnpm
 
 # Install Claude Code CLI using the native installer
 RUN curl -fsSL https://claude.ai/install.sh | bash

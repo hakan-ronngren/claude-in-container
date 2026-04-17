@@ -20,8 +20,10 @@ PROJECT_NAME="$(basename "$PROJECT_DIR")"
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
 # Build the image if the Dockerfile has changed since the last build
+# or the last build was more than 24h ago
 LAST_BUILD="$DOCKERFILE_DIR/.last-build"
-if [ "$DOCKERFILE_DIR/Dockerfile" -nt "$LAST_BUILD" ]; then
+LAST_BUILD_AGE=$(( $(date +%s) - $(date -r "$LAST_BUILD" +%s 2>/dev/null || echo 0) ))
+if [ "$DOCKERFILE_DIR/Dockerfile" -nt "$LAST_BUILD" ] || [ "$LAST_BUILD_AGE" -gt 86400 ]; then
     docker build -t "$IMAGE_NAME" "$DOCKERFILE_DIR"
     touch "$LAST_BUILD"
 fi

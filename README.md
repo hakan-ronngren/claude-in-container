@@ -21,6 +21,8 @@ Edit the [Dockerfile](./Dockerfile) and add the Debian packages or whatever tool
 
 Just run the command `claude-in-container` the way you would usually run `claude`, with the usual flags.
 
+On first run, Claude will prompt you to log in. Your credentials are saved into the `claude-in-container_claude-home` Docker volume, which persists the entire `/home/me` directory inside the container. Because state lives in the volume rather than the container itself, the container can be recreated on every invocation without losing your login session, preferences, or any other Claude configuration.
+
 ## License
 
 This repository is released under the [MIT License](LICENSE). You are free to fork, modify, and redistribute it for any purpose.

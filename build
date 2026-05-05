@@ -1,0 +1,16 @@
+#!/bin/bash
+
+set -e
+
+DOCKERFILE_DIR="$(dirname $0)"
+IMAGE_NAME="claude-in-container"
+TAG_FILE="$HOME/.config/claude-in-container/tag"
+
+if [ ! -f "$TAG_FILE" ] || [ "$DOCKERFILE_DIR/Dockerfile" -nt "$TAG_FILE" ]; then
+  TAG=$(od -A n -t x1 -N 4 /dev/urandom | tr -d ' \n')
+  docker build -t "$IMAGE_NAME:$TAG" "$DOCKERFILE_DIR"
+  mkdir -p "$(dirname "$TAG_FILE")"
+  printf '%s' "$TAG" > "$TAG_FILE"
+else
+  echo "${IMAGE_NAME}:$(cat $TAG_FILE) is up to date."
+fi

@@ -4,31 +4,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repo provides two files to run Claude Code inside a Docker container, isolating credentials and preferences from the host system:
+This repo provides three files to run Claude Code inside a Kubernetes pod on a local Rancher Desktop cluster, isolating credentials and preferences from the host system:
 
-- `Dockerfile` — builds a Debian-based image with Node.js (via nvm), pnpm, and Claude Code pre-installed as user `me`
-- `claude-in-container` — a bash script that builds the image if needed, starts a named container with Docker volumes for persistence, and exec's `claude` inside it
+- `Dockerfile` — builds a Debian-based image with Node.js (system-wide via NodeSource) and Claude Code pre-installed as user `me`
+- `build` — builds the Docker image and tags it with a random 4-byte hex string, storing the tag in `~/.config/claude-in-container/tag`; only rebuilds when the Dockerfile is newer than the tag file
+- `claude-in-container` — checks the tag file, creates a short-lived Kubernetes pod with the built image, and exec's `claude` inside it
 
 ## How it works
 
-The script mounts the caller's current working directory into the container at `/home/me/<project-name>` and sets that as the working directory. State persists across sessions:
+`claude-in-container` sets the kubectl context to `rancher-desktop`, then creates a pod named `claude-<random>` in the `claude` namespace. The pod mounts:
 
-- Volume `claude-in-container_claude-home` — the entire `/home/me` directory (includes Claude config, nvm, credentials)
+- `~/.local/share/claude-in-container/home` → `/home/me` (persists Claude config and credentials across sessions)
+- The caller's current working directory → `/home/me/<project-name>` (the project to work on)
 
-On each invocation, any existing container is removed and a new one is created. The container runs a sleep loop in the background; `docker exec` is used to attach interactively. Volumes ensure state survives container recreation.
-
-## Setup
-
-Place `claude-in-container` (the script) and `Dockerfile` in a directory on your PATH. The script hard-codes `DOCKERFILE_DIR="$HOME/claude-in-container"` — update this path to match where you put the files.
+The pod uses `hostNetwork: true`, so host services are reachable at `localhost` or `host.docker.internal`. When the session ends, a trap deletes the pod automatically.
 
 ## Rebuilding the image
 
-The script always runs `docker build` on each invocation, so the image is kept up to date automatically. Docker's layer cache makes this fast when nothing has changed. To force a full rebuild without cache:
+Run `build` from the repository directory. It rebuilds only if the Dockerfile has changed since the last build. To force a full rebuild without cache:
 
 ```bash
-docker build --no-cache -t claude-in-container ~/claude-in-container
+docker build --no-cache -t claude-in-container:<tag> ~/claude-in-container
 ```
 
-## Reaching host services from inside the container
+## Reaching host services from inside the pod
 
-The container sets `TEST_HOST=host.docker.internal` and adds the `host-gateway` host entry, so services on the host are reachable at `host.docker.internal`.
+The pod runs with `hostNetwork: true`, so services on the host are reachable at `localhost` or `host.docker.internal`.

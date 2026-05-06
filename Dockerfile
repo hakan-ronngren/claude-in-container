@@ -16,7 +16,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code and pnpm globally
+# Install Claude Code globally
 RUN npm install -g @anthropic-ai/claude-code
 
 # Create user 'claude' with passwordless sudo

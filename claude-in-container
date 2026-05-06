@@ -242,7 +242,7 @@ EOF
 printf '\033[2mCreating pod...\033[0m\n'
 ${KUBECTL} wait --for=condition=Ready pod/"$POD_NAME" -n "$NAMESPACE" --timeout=60s >/dev/null
 
-[ "$HOST_NETWORK" = "false" ] && printf '\033[33mEgress control active — see README to detect and allowlist blocked traffic.\033[0m\n'
+[ "$HOST_NETWORK" = "false" ] && printf '\033[33mEgress control active — see README on how to detect and allowlist blocked traffic.\033[0m\n'
 
 ${KUBECTL} exec -it "$POD_NAME" -n "$NAMESPACE" -- claude "$@"
 exit_code=$?

@@ -8,13 +8,12 @@
 set -e
 
 NAMESPACE="claude"
-
-kubectl config use-context rancher-desktop >/dev/null
+KUBECTL="kubectl --context rancher-desktop"
 
 PODS=()
 while IFS= read -r pod; do
     [ -n "$pod" ] && PODS+=("$pod")
-done < <(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+done < <(${KUBECTL} get pods -n "$NAMESPACE" --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
 
 if [ ${#PODS[@]} -eq 0 ]; then
     echo "No running Claude pod found in namespace '$NAMESPACE'." >&2
@@ -24,7 +23,7 @@ fi
 # Filter to pods that have an istio-proxy sidecar
 SIDECAR_PODS=()
 for pod in "${PODS[@]}"; do
-    if kubectl get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.containers[*].name} {.spec.initContainers[*].name}' | grep -q istio-proxy; then
+    if ${KUBECTL} get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.containers[*].name} {.spec.initContainers[*].name}' | grep -q istio-proxy; then
         SIDECAR_PODS+=("$pod")
     fi
 done
@@ -37,7 +36,7 @@ fi
 
 LABELS=()
 for pod in "${SIDECAR_PODS[@]}"; do
-    project=$(kubectl get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.containers[0].workingDir}')
+    project=$(${KUBECTL} get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.containers[0].workingDir}')
     LABELS+=("$pod  ($project)")
 done
 
@@ -52,4 +51,4 @@ else
 fi
 
 echo "Streaming blocked egress from $POD_NAME (Ctrl-C to stop)..."
-kubectl logs -f "$POD_NAME" -n "$NAMESPACE" -c istio-proxy | grep --line-buffered BlackHoleCluster
+${KUBECTL} logs -f "$POD_NAME" -n "$NAMESPACE" -c istio-proxy | grep --line-buffered BlackHoleCluster

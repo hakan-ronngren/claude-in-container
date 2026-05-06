@@ -97,6 +97,9 @@ spec:
   hosts:
 $DNS_HOSTS
   ports:
+  - number: 80
+    name: http
+    protocol: HTTP
   - number: 443
     name: https
     protocol: HTTPS
@@ -116,6 +119,9 @@ spec:
   hosts:
 $WILDCARD_HOSTS
   ports:
+  - number: 80
+    name: http
+    protocol: HTTP
   - number: 443
     name: https
     protocol: HTTPS

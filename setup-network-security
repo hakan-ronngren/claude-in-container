@@ -67,14 +67,22 @@ if [ ! -f "$EGRESS_FILE" ]; then
 *.anthropic.com
 
 # C
-platform.claude.com
+*.claude.ai
+*.claude.com
+
+# D
+deb.debian.org
 
 # G
 github.com
 *.github.com
 raw.githubusercontent.com
+packages.cloud.google.com
+*.googleapis.com
+aiplatform.eu.rep.googleapis.com
 
 # N
+deb.nodesource.com
 registry.npmjs.org
 EOF
     echo "Created: $EGRESS_FILE"

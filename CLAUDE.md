@@ -15,7 +15,7 @@ This repo provides three files to run Claude Code inside a Kubernetes pod on a l
 `claude-in-container` sets the kubectl context to `rancher-desktop`, then creates a pod named `claude-<random>` in the `claude` namespace. The pod mounts:
 
 - `~/.local/share/claude-in-container/home` → `/home/claude` (persists Claude config and credentials across sessions)
-- The caller's current working directory → `/home/claude/<project-name>` (the project to work on)
+- The caller's current working directory → `/home/claude/projects/<project-name>` (the project to work on)
 
 The pod uses `hostNetwork: true`, so host services are reachable at `localhost` or `host.docker.internal`. When the session ends, a trap deletes the pod automatically.
 

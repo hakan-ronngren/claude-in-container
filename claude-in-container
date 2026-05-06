@@ -28,7 +28,7 @@ GIT_AUTHOR_NAME="$(git config user.name)"
 POD_SUFFIX=$(od -A n -t x1 -N 4 /dev/urandom | tr -d ' \n')
 POD_NAME="claude-$POD_SUFFIX"
 
-mkdir -p "$CLAUDE_HOME_DIR"
+mkdir -p "$CLAUDE_HOME_DIR/projects"
 
 trap "printf '\033[2mRemoving pod...\033[0m\n'; kubectl delete pod $POD_NAME -n $NAMESPACE --ignore-not-found --grace-period=2 >/dev/null 2>&1" EXIT
 
@@ -50,7 +50,7 @@ spec:
     - name: claude
       image: $IMAGE_NAME:$IMAGE_TAG
       imagePullPolicy: Never
-      workingDir: /home/claude/$PROJECT_NAME
+      workingDir: /home/claude/projects/$PROJECT_NAME
       command: ["sleep", "infinity"]
       env:
         - name: HOME
@@ -73,7 +73,7 @@ spec:
         - name: claude-home
           mountPath: /home/claude
         - name: project
-          mountPath: /home/claude/$PROJECT_NAME
+          mountPath: /home/claude/projects/$PROJECT_NAME
   volumes:
     - name: claude-home
       hostPath:

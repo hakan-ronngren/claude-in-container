@@ -28,6 +28,8 @@ You are running inside a container (a Kubernetes pod).
 - You have passwordless sudo access on your container. Use `sudo apt install`
   to install any Debian packages you need. The user can approve this without risk,
   as you are modifying your container, not the user's computer.
+- The user has a script `shell-in-claude-container` that lets them exec into your
+  container to inspect or modify it.
 EOF
   echo "${CLAUDE_MD} saved."
 fi

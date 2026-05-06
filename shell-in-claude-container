@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# shell-in-claude-container - Start a shell in an existing Claude Code container
+
+set -e
+
+NAMESPACE="claude"
+
+kubectl config use-context rancher-desktop >/dev/null
+
+PODS=()
+while IFS= read -r pod; do
+    [ -n "$pod" ] && PODS+=("$pod")
+done < <(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+
+if [ ${#PODS[@]} -eq 0 ]; then
+    echo "No running Claude pod found in namespace '$NAMESPACE'." >&2
+    exit 1
+fi
+
+LABELS=()
+for pod in "${PODS[@]}"; do
+    project=$(kubectl get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.containers[0].workingDir}')
+    LABELS+=("$pod  ($project)")
+done
+
+if [ ${#PODS[@]} -eq 1 ]; then
+    POD_NAME="${PODS[0]}"
+else
+    PS3="Choose a pod: "
+    select label in "${LABELS[@]}"; do
+        [ -n "$label" ] && POD_NAME="${PODS[$((REPLY-1))]}" && break
+        echo "Invalid choice." >&2
+    done
+fi
+
+echo "Attaching to $POD_NAME..."
+kubectl exec -it "$POD_NAME" -n "$NAMESPACE" -- /bin/bash

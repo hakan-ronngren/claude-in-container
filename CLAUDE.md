@@ -30,3 +30,7 @@ docker build --no-cache -t claude-in-container:<tag> ~/claude-in-container
 ## Reaching host services from inside the pod
 
 The pod runs with `hostNetwork: true`, so services on the host are reachable at `localhost` or `host.docker.internal`.
+
+## For power users
+
+- If the user needs to inspect or modify your container, they can run `shell-in-claude-container` to exec into it.

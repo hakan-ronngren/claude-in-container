@@ -20,6 +20,8 @@ Runs Claude Code in a Kubernetes pod, persisting your credentials, preferences, 
 
 Edit the [Dockerfile](./Dockerfile) and add the Debian packages or whatever tools you need in your image, then run `./build` again.
 
+If you need to inspect or modify a running container, run `shell-in-claude-container` to exec into it.
+
 ## Run
 
 Run `claude-in-container` from inside any project directory, the way you would usually run `claude`, with the usual flags.

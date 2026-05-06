@@ -60,12 +60,21 @@ if [ ! -f "$EGRESS_FILE" ]; then
 # One hostname per line. Wildcards (e.g. *.example.com) are supported.
 # Lines starting with # are ignored.
 #
-# To add a destination, append it here and run claude-in-container as usual
+# To add a destination, add it here and run claude-in-container as usual
 # — manifests are regenerated automatically on every pod start.
-api.anthropic.com
-statsig.anthropic.com
+
+# A
+*.anthropic.com
+
+# C
+platform.claude.com
+
+# G
 github.com
 *.github.com
+raw.githubusercontent.com
+
+# N
 registry.npmjs.org
 EOF
     echo "Created: $EGRESS_FILE"
@@ -84,4 +93,4 @@ echo "Envoy will block all egress not listed in:"
 echo "  $EGRESS_FILE"
 echo ""
 echo "To observe blocked traffic while Claude is running:"
-echo "  kubectl logs -n claude <pod-name> -c istio-proxy | grep BlackHoleCluster"
+echo "  show-blocked-claude-container-egress"

@@ -16,14 +16,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code globally
-RUN npm install -g @anthropic-ai/claude-code
-
 # Create user 'claude' with passwordless sudo
 RUN useradd -m -s /bin/bash claude \
     && echo 'claude ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/claude
 
 ENV HOME=/home/claude
+ENV PATH="/home/claude/.local/bin:$PATH"
 ENV TEST_HOST=host.docker.internal
 
 USER claude

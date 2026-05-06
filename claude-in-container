@@ -244,7 +244,14 @@ ${KUBECTL} wait --for=condition=Ready pod/"$POD_NAME" -n "$NAMESPACE" --timeout=
 
 [ "$HOST_NETWORK" = "false" ] && printf '\033[33mEgress control active — see README on how to detect and allowlist blocked traffic.\033[0m\n'
 
-${KUBECTL} exec -it "$POD_NAME" -n "$NAMESPACE" -- claude "$@"
+CLAUDE_BIN=/home/claude/.local/bin/claude
+
+if ! ${KUBECTL} exec "$POD_NAME" -n "$NAMESPACE" -- test -f "$CLAUDE_BIN" 2>/dev/null; then
+    printf '\033[2mInstalling Claude Code...\033[0m\n'
+    ${KUBECTL} exec "$POD_NAME" -n "$NAMESPACE" -- bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
+fi
+
+${KUBECTL} exec -it "$POD_NAME" -n "$NAMESPACE" -- "$CLAUDE_BIN" "$@"
 exit_code=$?
 
 if [ $exit_code -eq 0 ]; then

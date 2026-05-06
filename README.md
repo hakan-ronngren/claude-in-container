@@ -58,7 +58,9 @@ mkdir -p ~/.local/share/claude-in-container/home/.config/gcloud
 
 Run `claude-in-container` from inside any project directory, the way you would usually run `claude`, with the usual flags.
 
-On first run, Claude will prompt you to log in. Your credentials are saved into `~/.local/share/claude-in-container/home`, which is mounted as `/home/claude` inside the pod. State persists across sessions because it lives in that host directory rather than in the pod itself.
+The pod's home directory `/home/claude` is mounted from `~/.local/share/claude-in-container/home` on your host, so its contents persist across sessions even though the pod itself is ephemeral.
+
+On the very first run, Claude Code installs itself into `/home/claude` before starting. This takes about a minute and only happens once — subsequent runs skip straight to Claude. After installation, Claude will prompt you to log in; your credentials are stored in `/home/claude` and reused in every subsequent session.
 
 ### Resuming sessions
 

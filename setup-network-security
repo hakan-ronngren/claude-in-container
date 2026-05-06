@@ -67,6 +67,7 @@ if [ ! -f "$EGRESS_FILE" ]; then
 *.anthropic.com
 
 # C
+claude.ai
 *.claude.ai
 *.claude.com
 

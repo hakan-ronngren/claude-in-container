@@ -28,6 +28,23 @@ Run `claude-in-container` from inside any project directory, the way you would u
 
 On first run, Claude will prompt you to log in. Your credentials are saved into `~/.local/share/claude-in-container/home`, which is mounted as `/home/claude` inside the pod. State persists across sessions because it lives in that host directory rather than in the pod itself.
 
+### Resuming sessions
+
+When you exit Claude, it prints a message like:
+
+```
+Resume this session with:
+claude --resume e40a1763-ab5e-4143-8ec2-be874bb4aacd
+```
+
+Since you're running inside a container, use `claude-in-container` instead:
+
+```bash
+claude-in-container --resume e40a1763-ab5e-4143-8ec2-be874bb4aacd
+```
+
+This creates a fresh pod but resumes your previous session, since session data persists in `~/.local/share/claude-in-container/home`.
+
 ## Reaching host services from inside the pod
 
 The pod runs with `hostNetwork: true`, so services on the host are reachable at `localhost` or `host.docker.internal` (both resolve to the host).

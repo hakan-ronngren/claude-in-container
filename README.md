@@ -4,19 +4,21 @@ Runs Claude Code in a Kubernetes pod, persisting your credentials, preferences, 
 
 ## System requirements
 
-- [Rancher Desktop](https://rancherdesktop.io/) with **dockerd** selected as the container engine (Preferences → Container Engine)
+- [Rancher Desktop](https://rancherdesktop.io/)
+  - **dockerd** selected as the container engine (Preferences → Container Engine)
+  - Kubernetes enabled (Preferences → Kubernetes).
 - A valid Claude subscription
 
 ## Install
 
 1. Clone this repository in your home directory
-2. Run `build` once from the repository directory to build the image
+2. Run `./build` once from the repository directory to build the image
 3. Choose a directory you have in your `PATH`, such as `~/bin`
 4. Run `ln -s $HOME/claude-in-container/claude-in-container ~/bin` or whichever directory you chose
 
 ## Adapt to your needs
 
-Edit the [Dockerfile](./Dockerfile) and add the Debian packages or whatever tools you need in your image, then run `build` again.
+Edit the [Dockerfile](./Dockerfile) and add the Debian packages or whatever tools you need in your image, then run `./build` again.
 
 ## Run
 

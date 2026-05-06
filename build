@@ -6,7 +6,33 @@ DOCKERFILE_DIR="$(dirname $0)"
 IMAGE_NAME="claude-in-container"
 TAG_FILE="$HOME/.config/claude-in-container/tag"
 
-if [ ! -f "$TAG_FILE" ] || [ "$DOCKERFILE_DIR/Dockerfile" -nt "$TAG_FILE" ]; then
+FORCE=false
+for arg in "$@"; do
+  [ "$arg" = "--force" ] && FORCE=true
+done
+
+CLAUDE_HOME_DIR="$HOME/.local/share/claude-in-container/home"
+CLAUDE_MD="$CLAUDE_HOME_DIR/.claude/CLAUDE.md"
+
+if $FORCE || [ ! -f "$CLAUDE_MD" ]; then
+  mkdir -p "$(dirname "$CLAUDE_MD")"
+  cat > "$CLAUDE_MD" <<'EOF'
+# CLAUDE.md
+
+You are running inside a container (a Kubernetes pod).
+
+- You have your own home directory, separate from the user's. It is is `/home/me`
+  and persists across sessions.
+- The user's project directory is mounted at `/home/me/<project-name>` and is
+  your working directory.
+- You have passwordless sudo access on your container. Use `sudo apt install`
+  to install any Debian packages you need. The user can approve this without risk,
+  as you are modifying your container, not the user's computer.
+EOF
+  echo "${CLAUDE_MD} saved."
+fi
+
+if $FORCE || [ ! -f "$TAG_FILE" ] || [ "$DOCKERFILE_DIR/Dockerfile" -nt "$TAG_FILE" ]; then
   TAG=$(od -A n -t x1 -N 4 /dev/urandom | tr -d ' \n')
   docker build -t "$IMAGE_NAME:$TAG" "$DOCKERFILE_DIR"
   mkdir -p "$(dirname "$TAG_FILE")"

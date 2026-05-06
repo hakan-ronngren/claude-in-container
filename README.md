@@ -27,6 +27,33 @@ Edit the [Dockerfile](./Dockerfile) and add the Debian packages or whatever tool
 
 If you need to inspect or modify a running container, run `shell-in-claude-container` to exec into it.
 
+## Customizing the pod
+
+You can inject extra environment variables and bind mounts by creating files in `~/.config/claude-in-container/`.
+
+### Extra environment variables — `env.conf`
+
+Each line sets one variable (`KEY=VALUE`). Lines starting with `#` are ignored.
+
+```
+MY_API_KEY=abc123
+MY_REGION=us-east-1
+```
+
+### Extra bind mounts — `mounts.conf`
+
+Each line adds one mount (`host-path:container-path`). `~` is expanded to your home directory. Lines starting with `#` are ignored. If the host path does not exist, the script exits with an error.
+
+```
+~/.config/gcloud/application_default_credentials.json:/home/claude/.config/gcloud/application_default_credentials.json
+```
+
+**File mounts:** Kubernetes requires the parent directory of a file mount to exist inside the container. Because `/home/claude` is itself a bind mount from `~/.local/share/claude-in-container/home`, you need to pre-create the parent there. For the example above:
+
+```bash
+mkdir -p ~/.local/share/claude-in-container/home/.config/gcloud
+```
+
 ## Run
 
 Run `claude-in-container` from inside any project directory, the way you would usually run `claude`, with the usual flags.

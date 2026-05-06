@@ -10,6 +10,8 @@ NAMESPACE="claude"
 TAG_FILE="$HOME/.config/claude-in-container/tag"
 CONFIG_DIR="$HOME/.config/claude-in-container"
 EGRESS_FILE="$CONFIG_DIR/allowed-egresses.conf"
+ENV_FILE="$CONFIG_DIR/env.conf"
+MOUNTS_FILE="$CONFIG_DIR/mounts.conf"
 MANIFESTS_DIR="$CONFIG_DIR/manifests"
 CLAUDE_HOME_DIR="$HOME/.local/share/claude-in-container/home"
 
@@ -127,6 +129,42 @@ else
     EXCLUDE_RANGES=""
 fi
 
+EXTRA_ENV=""
+if [ -f "$ENV_FILE" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        KEY="${line%%=*}"
+        VALUE="${line#*=}"
+        EXTRA_ENV+="        - name: $KEY"$'\n'"          value: \"$VALUE\""$'\n'
+    done < "$ENV_FILE"
+fi
+
+EXTRA_VOLUME_MOUNTS=""
+EXTRA_VOLUMES=""
+MOUNT_IDX=0
+if [ -f "$MOUNTS_FILE" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        HOST_PATH="${line%%:*}"
+        CONTAINER_PATH="${line#*:}"
+        HOST_PATH="${HOST_PATH/#\~/$HOME}"
+        if [ -d "$HOST_PATH" ]; then
+            PATH_TYPE="Directory"
+        elif [ -f "$HOST_PATH" ]; then
+            PATH_TYPE="File"
+        else
+            echo "Mount source does not exist: $HOST_PATH" >&2
+            exit 1
+        fi
+        VOL_NAME="extra-$MOUNT_IDX"
+        EXTRA_VOLUME_MOUNTS+="        - name: $VOL_NAME"$'\n'"          mountPath: $CONTAINER_PATH"$'\n'
+        EXTRA_VOLUMES+="    - name: $VOL_NAME"$'\n'"      hostPath:"$'\n'"        path: $HOST_PATH"$'\n'"        type: $PATH_TYPE"$'\n'
+        MOUNT_IDX=$((MOUNT_IDX + 1))
+    done < "$MOUNTS_FILE"
+fi
+
 trap "${KUBECTL} delete pod $POD_NAME -n $NAMESPACE --ignore-not-found --grace-period=2 >/dev/null 2>&1" EXIT
 
 # Create namespace first so manifests can reference it
@@ -176,11 +214,13 @@ spec:
           value: "$GIT_AUTHOR_EMAIL"
         - name: GIT_COMMITTER_NAME
           value: "$GIT_AUTHOR_NAME"
+${EXTRA_ENV}
       volumeMounts:
         - name: claude-home
           mountPath: /home/claude
         - name: project
           mountPath: /home/claude/projects/$PROJECT_NAME
+${EXTRA_VOLUME_MOUNTS}
   volumes:
     - name: claude-home
       hostPath:
@@ -190,6 +230,7 @@ spec:
       hostPath:
         path: $PROJECT_DIR
         type: Directory
+${EXTRA_VOLUMES}
 EOF
 
 printf '\033[2mCreating pod...\033[0m\n'

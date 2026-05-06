@@ -30,13 +30,19 @@ You are running inside a container (a Kubernetes pod).
   as you are modifying your container, not the user's computer.
 - The user has a script `shell-in-claude-container` that lets them exec into your
   container to inspect or modify it.
+- Host services are reachable at `host.docker.internal`. Do not use `localhost`
+  to reach host services — it refers to the pod's own loopback, not the host.
 EOF
   echo "${CLAUDE_MD} saved."
 fi
 
 if $FORCE || [ ! -f "$TAG_FILE" ] || [ "$DOCKERFILE_DIR/Dockerfile" -nt "$TAG_FILE" ]; then
   TAG=$(od -A n -t x1 -N 4 /dev/urandom | tr -d ' \n')
-  docker build -t "$IMAGE_NAME:$TAG" "$DOCKERFILE_DIR"
+  if nerdctl info >/dev/null 2>&1; then
+    nerdctl build --namespace k8s.io -t "$IMAGE_NAME:$TAG" "$DOCKERFILE_DIR"
+  else
+    docker build -t "$IMAGE_NAME:$TAG" "$DOCKERFILE_DIR"
+  fi
   mkdir -p "$(dirname "$TAG_FILE")"
   printf '%s' "$TAG" > "$TAG_FILE"
 else

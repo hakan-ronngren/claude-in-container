@@ -19,6 +19,10 @@ Rancher Desktop defaults to flannel, which does **not** enforce `NetworkPolicy`.
 - FQDN-based egress rules (`CiliumNetworkPolicy`)
 - Hubble observability layer
 
+## Rancher Desktop footprint
+
+Cilium requires modifying the Lima VM configuration via `~/Library/Application Support/rancher-desktop/lima/_config/override.yaml`. This file persists outside the normal Rancher Desktop preferences and must be manually removed if Cilium is abandoned — easy to forget and can cause mysterious failures. The Istio alternative leaves no such footprint.
+
 ## Known boundaries
 
 - Cilium's FQDN policy requires the pod to use cluster DNS (CoreDNS). DNS-over-HTTPS or hardcoded IPs bypass FQDN matching — but are still blocked by default-deny.

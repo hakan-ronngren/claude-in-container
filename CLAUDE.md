@@ -17,7 +17,7 @@ This repo provides three files to run Claude Code inside a Kubernetes pod on a l
 - `~/.local/share/claude-in-container/home` → `/home/claude` (persists Claude config and credentials across sessions)
 - The caller's current working directory → `/home/claude/projects/<project-name>` (the project to work on)
 
-The pod uses `hostNetwork: true`, so host services are reachable at `localhost` or `host.docker.internal`. When the session ends, a trap deletes the pod automatically.
+Host services are reachable at `host.docker.internal`. When the session ends, a trap deletes the pod automatically.
 
 ## Rebuilding the image
 
@@ -29,7 +29,7 @@ docker build --no-cache -t claude-in-container:<tag> ~/claude-in-container
 
 ## Reaching host services from inside the pod
 
-The pod runs with `hostNetwork: true`, so services on the host are reachable at `localhost` or `host.docker.internal`.
+Host services are reachable at `host.docker.internal`. When egress control is enabled, `localhost` refers to the pod's own loopback and cannot be used to reach host services — use `host.docker.internal` instead.
 
 ## For power users
 

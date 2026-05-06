@@ -1,0 +1,179 @@
+#!/bin/bash
+
+# setup-network-security - Create Istio egress-control manifests for claude-in-container
+#
+# Run this once to opt in to network hardening. After running, claude-in-container
+# will inject an Istio Envoy sidecar into the pod and restrict outbound traffic
+# to an explicit allowlist of ServiceEntry resources.
+#
+# Prerequisites:
+#   - Istio installed on Rancher Desktop:
+#     https://istio.io/latest/docs/setup/getting-started/
+#   - kubectl pointing at rancher-desktop
+
+set -e
+
+MANIFESTS_DIR="$HOME/.config/claude-in-container/manifests"
+
+# Verify kubectl is available and rancher-desktop context exists
+if ! kubectl config get-contexts rancher-desktop >/dev/null 2>&1; then
+    echo "ERROR: kubectl context 'rancher-desktop' not found." >&2
+    echo "       Is Rancher Desktop running?" >&2
+    exit 1
+fi
+
+kubectl config use-context rancher-desktop >/dev/null
+
+# Verify Istio is installed
+if ! kubectl get pods -n istio-system -l app=istiod --no-headers 2>/dev/null | grep -q Running; then
+    echo "ERROR: No running istiod pod found in istio-system." >&2
+    echo "       Install Istio first:" >&2
+    echo "         istioctl install --set profile=minimal \\" >&2
+    echo "                          --set meshConfig.outboundTrafficPolicy.mode=REGISTRY_ONLY \\" >&2
+    echo "                          --set meshConfig.accessLogFile=/dev/stdout -y" >&2
+    exit 1
+fi
+
+# Ensure required mesh settings are in place:
+#   - REGISTRY_ONLY: default-deny egress
+#   - accessLogFile: Envoy logs blocked connections to stdout (visible via kubectl logs)
+MESH_CONFIG=$(kubectl get configmap istio -n istio-system -o jsonpath='{.data.mesh}' 2>/dev/null)
+REGISTRY_ONLY=$(echo "$MESH_CONFIG" | grep -c "REGISTRY_ONLY" || true)
+ACCESS_LOG=$(echo "$MESH_CONFIG" | grep -c "accessLogFile" || true)
+if [ "$REGISTRY_ONLY" -eq 0 ] || [ "$ACCESS_LOG" -eq 0 ]; then
+    echo "Configuring Istio mesh settings (REGISTRY_ONLY + access logging)..."
+    istioctl install --set profile=minimal \
+                     --set meshConfig.outboundTrafficPolicy.mode=REGISTRY_ONLY \
+                     --set meshConfig.accessLogFile=/dev/stdout -y
+fi
+
+mkdir -p "$MANIFESTS_DIR"
+
+# Namespace — enables sidecar injection for all claude pods
+cat > "$MANIFESTS_DIR/istio-namespace.yaml" <<'EOF'
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: claude
+  labels:
+    istio-injection: enabled
+EOF
+
+# Sidecar — restricts Envoy's routing table to declared services only.
+# Each allowed external host must appear here AND have a ServiceEntry below.
+# With REGISTRY_ONLY, Envoy drops traffic to any host not in this list.
+cat > "$MANIFESTS_DIR/istio-sidecar.yaml" <<'EOF'
+apiVersion: networking.istio.io/v1beta1
+kind: Sidecar
+metadata:
+  name: default
+  namespace: claude
+spec:
+  egress:
+  - hosts:
+    - istio-system/*        # Istio control plane (required)
+    - ./api.anthropic.com
+    - ./statsig.anthropic.com
+    - ./github.com
+    - ./*.github.com
+    - ./registry.npmjs.org
+EOF
+
+# ServiceEntry — declares each allowed external host to the mesh.
+# To add a destination: add a ServiceEntry here and a matching host in istio-sidecar.yaml,
+# then re-run setup-network-security or: kubectl apply -f <manifests-dir>
+cat > "$MANIFESTS_DIR/istio-service-entries.yaml" <<'EOF'
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: allow-anthropic-api
+  namespace: claude
+spec:
+  hosts:
+  - api.anthropic.com
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: allow-anthropic-statsig
+  namespace: claude
+spec:
+  hosts:
+  - statsig.anthropic.com
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: allow-github
+  namespace: claude
+spec:
+  hosts:
+  - github.com
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: allow-github-wildcard
+  namespace: claude
+spec:
+  hosts:
+  - "*.github.com"
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: NONE
+  location: MESH_EXTERNAL
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: allow-npm
+  namespace: claude
+spec:
+  hosts:
+  - registry.npmjs.org
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+EOF
+
+echo "Written:"
+echo "  $MANIFESTS_DIR/istio-namespace.yaml"
+echo "  $MANIFESTS_DIR/istio-sidecar.yaml"
+echo "  $MANIFESTS_DIR/istio-service-entries.yaml"
+echo ""
+echo "Network hardening is now enabled. The next time you run claude-in-container it will:"
+echo "  1. Label the 'claude' namespace for Istio sidecar injection"
+echo "  2. Apply the Sidecar and ServiceEntry policies"
+echo "  3. Start the pod with hostNetwork=false (required for sidecar injection)"
+echo ""
+echo "Envoy will block all egress not declared in a ServiceEntry."
+echo ""
+echo "To observe blocked traffic while Claude is running:"
+echo "  kubectl logs -n claude <pod-name> -c istio-proxy | grep BlackHoleCluster"
+echo ""
+echo "To add a destination, edit both files and re-run setup-network-security:"
+echo "  $MANIFESTS_DIR/istio-service-entries.yaml"
+echo "  $MANIFESTS_DIR/istio-sidecar.yaml"

@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# show-blocked-egress - Stream egress connections blocked by the Istio sidecar
+#
+# Tails the istio-proxy access log of a running claude pod and filters for
+# BlackHoleCluster entries, which represent traffic blocked by REGISTRY_ONLY.
+
+set -e
+
+NAMESPACE="claude"
+
+kubectl config use-context rancher-desktop >/dev/null
+
+PODS=()
+while IFS= read -r pod; do
+    [ -n "$pod" ] && PODS+=("$pod")
+done < <(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+
+if [ ${#PODS[@]} -eq 0 ]; then
+    echo "No running Claude pod found in namespace '$NAMESPACE'." >&2
+    exit 1
+fi
+
+# Filter to pods that have an istio-proxy sidecar
+SIDECAR_PODS=()
+for pod in "${PODS[@]}"; do
+    if kubectl get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.containers[*].name} {.spec.initContainers[*].name}' | grep -q istio-proxy; then
+        SIDECAR_PODS+=("$pod")
+    fi
+done
+
+if [ ${#SIDECAR_PODS[@]} -eq 0 ]; then
+    echo "No running Claude pod with an Istio sidecar found." >&2
+    echo "Run setup-network-security to enable egress control." >&2
+    exit 1
+fi
+
+LABELS=()
+for pod in "${SIDECAR_PODS[@]}"; do
+    project=$(kubectl get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.containers[0].workingDir}')
+    LABELS+=("$pod  ($project)")
+done
+
+if [ ${#SIDECAR_PODS[@]} -eq 1 ]; then
+    POD_NAME="${SIDECAR_PODS[0]}"
+else
+    PS3="Choose a pod: "
+    select label in "${LABELS[@]}"; do
+        [ -n "$label" ] && POD_NAME="${SIDECAR_PODS[$((REPLY-1))]}" && break
+        echo "Invalid choice." >&2
+    done
+fi
+
+echo "Streaming blocked egress from $POD_NAME (Ctrl-C to stop)..."
+kubectl logs -f "$POD_NAME" -n "$NAMESPACE" -c istio-proxy | grep --line-buffered BlackHoleCluster

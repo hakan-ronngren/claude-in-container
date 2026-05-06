@@ -8,6 +8,7 @@ DOCKERFILE_DIR="$HOME/claude-in-container"
 IMAGE_NAME="claude-in-container"
 NAMESPACE="claude"
 TAG_FILE="$HOME/.config/claude-in-container/tag"
+MANIFESTS_DIR="$HOME/.config/claude-in-container/manifests"
 CLAUDE_HOME_DIR="$HOME/.local/share/claude-in-container/home"
 
 PROJECT_DIR="$(pwd)"
@@ -30,21 +31,44 @@ POD_NAME="claude-$POD_SUFFIX"
 
 mkdir -p "$CLAUDE_HOME_DIR/projects"
 
+# Enable host networking only when no egress manifests are present.
+# With Istio manifests installed, hostNetwork must be false for sidecar injection to work.
+if ls "$MANIFESTS_DIR"/*.yaml >/dev/null 2>&1; then
+    HOST_NETWORK="false"
+    # Exclude host.docker.internal from Istio interception so host services remain reachable.
+    # The annotation bypasses iptables rules for that IP — no port enumeration needed.
+    HOST_DOCKER_IP=$(rdctl shell -- getent hosts host.docker.internal 2>/dev/null | awk '{print $1}')
+    EXCLUDE_RANGES="${HOST_DOCKER_IP:+${HOST_DOCKER_IP}/32}"
+else
+    HOST_NETWORK="true"
+    EXCLUDE_RANGES=""
+fi
+
 trap "kubectl delete pod $POD_NAME -n $NAMESPACE --ignore-not-found --grace-period=2 >/dev/null 2>&1" EXIT
 
+# Create namespace first so manifests can reference it
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Namespace
 metadata:
   name: $NAMESPACE
----
+EOF
+
+# Apply egress-control manifests if present (written by setup-network-security)
+if [ "$HOST_NETWORK" = "false" ]; then
+    kubectl apply -f "$MANIFESTS_DIR"
+fi
+
+kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Pod
 metadata:
   name: $POD_NAME
   namespace: $NAMESPACE
+  ${EXCLUDE_RANGES:+annotations:}
+  ${EXCLUDE_RANGES:+  traffic.sidecar.istio.io/excludeOutboundIPRanges: "${EXCLUDE_RANGES}"}
 spec:
-  hostNetwork: true
+  hostNetwork: $HOST_NETWORK
   restartPolicy: Never
   containers:
     - name: claude
@@ -91,8 +115,11 @@ kubectl exec -it "$POD_NAME" -n "$NAMESPACE" -- claude "$@"
 exit_code=$?
 
 if [ $exit_code -eq 0 ]; then
-    printf "\033[1;35mContainer sessions are kept separate, so to resume this session, use:\033[0m\n"
-    printf "\033[1;35m  claude-in-container --resume <session-id>\033[0m\n"
+    command=$(basename $0)
+    if [ "$command" != 'claude' ]; then
+        printf "\033[1;35mContainer sessions are kept separate, so to resume this session, use:\033[0m\n"
+        printf "\033[1;35m  $command --resume <session-id>\033[0m\n"
+    fi
     printf '\033[2mRemoving pod...\033[0m\n'
 fi
 

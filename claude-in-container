@@ -50,11 +50,11 @@ spec:
     - name: claude
       image: $IMAGE_NAME:$IMAGE_TAG
       imagePullPolicy: Never
-      workingDir: /home/me/$PROJECT_NAME
+      workingDir: /home/claude/$PROJECT_NAME
       command: ["sleep", "infinity"]
       env:
         - name: HOME
-          value: /home/me
+          value: /home/claude
         - name: TERM
           value: "$TERM"
         - name: COLORTERM
@@ -71,9 +71,9 @@ spec:
           value: "$GIT_AUTHOR_NAME"
       volumeMounts:
         - name: claude-home
-          mountPath: /home/me
+          mountPath: /home/claude
         - name: project
-          mountPath: /home/me/$PROJECT_NAME
+          mountPath: /home/claude/$PROJECT_NAME
   volumes:
     - name: claude-home
       hostPath:

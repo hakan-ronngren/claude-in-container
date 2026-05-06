@@ -21,9 +21,9 @@ if $FORCE || [ ! -f "$CLAUDE_MD" ]; then
 
 You are running inside a container (a Kubernetes pod).
 
-- You have your own home directory, separate from the user's. It is is `/home/me`
+- You have your own home directory, separate from the user's. It is is `/home/claude`
   and persists across sessions.
-- The user's project directory is mounted at `/home/me/<project-name>` and is
+- The user's project directory is mounted at `/home/claude/<project-name>` and is
   your working directory.
 - You have passwordless sudo access on your container. Use `sudo apt install`
   to install any Debian packages you need. The user can approve this without risk,

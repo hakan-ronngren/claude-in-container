@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repo provides three files to run Claude Code inside a Kubernetes pod on a local Rancher Desktop cluster, isolating credentials and preferences from the host system:
 
-- `Dockerfile` — builds a Debian-based image with Node.js (system-wide via NodeSource) and Claude Code pre-installed as user `me`
+- `Dockerfile` — builds a Debian-based image with Node.js (system-wide via NodeSource) and Claude Code pre-installed as user `claude`
 - `build` — builds the Docker image and tags it with a random 4-byte hex string, storing the tag in `~/.config/claude-in-container/tag`; only rebuilds when the Dockerfile is newer than the tag file
 - `claude-in-container` — checks the tag file, creates a short-lived Kubernetes pod with the built image, and exec's `claude` inside it
 
@@ -14,8 +14,8 @@ This repo provides three files to run Claude Code inside a Kubernetes pod on a l
 
 `claude-in-container` sets the kubectl context to `rancher-desktop`, then creates a pod named `claude-<random>` in the `claude` namespace. The pod mounts:
 
-- `~/.local/share/claude-in-container/home` → `/home/me` (persists Claude config and credentials across sessions)
-- The caller's current working directory → `/home/me/<project-name>` (the project to work on)
+- `~/.local/share/claude-in-container/home` → `/home/claude` (persists Claude config and credentials across sessions)
+- The caller's current working directory → `/home/claude/<project-name>` (the project to work on)
 
 The pod uses `hostNetwork: true`, so host services are reachable at `localhost` or `host.docker.internal`. When the session ends, a trap deletes the pod automatically.
 

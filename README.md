@@ -24,7 +24,7 @@ Edit the [Dockerfile](./Dockerfile) and add the Debian packages or whatever tool
 
 Run `claude-in-container` from inside any project directory, the way you would usually run `claude`, with the usual flags.
 
-On first run, Claude will prompt you to log in. Your credentials are saved into `~/.local/share/claude-in-container/home`, which is mounted as `/home/me` inside the pod. State persists across sessions because it lives in that host directory rather than in the pod itself.
+On first run, Claude will prompt you to log in. Your credentials are saved into `~/.local/share/claude-in-container/home`, which is mounted as `/home/claude` inside the pod. State persists across sessions because it lives in that host directory rather than in the pod itself.
 
 ## Reaching host services from inside the pod
 

@@ -86,12 +86,14 @@ Full getting-started guide: [istio.io/latest/docs/setup/getting-started/](https:
 ./setup-network-security
 ```
 
-This writes Istio manifests to `~/.config/claude-in-container/manifests/`. From that point on, `claude-in-container` automatically applies them before starting each pod, injecting an Envoy sidecar that blocks all outbound traffic except an initial allowlist:
+This creates `~/.config/claude-in-container/allowed-egresses.conf` with an initial allowlist:
 
 - `api.anthropic.com:443`
 - `statsig.anthropic.com:443`
 - `github.com:443` / `*.github.com:443`
 - `registry.npmjs.org:443`
+
+From that point on, `claude-in-container` generates Istio manifests from that file and applies them before starting each pod, injecting an Envoy sidecar that blocks all other outbound traffic.
 
 ### Discovering blocked traffic
 
@@ -103,7 +105,7 @@ show-blocked-claude-container-egress
 
 This streams `BlackHoleCluster` entries from the Istio sidecar access log — one line per blocked connection, including the destination hostname or IP.
 
-To add a destination, add a `ServiceEntry` to `~/.config/claude-in-container/manifests/istio-service-entries.yaml` and a matching host to `istio-sidecar.yaml`, then re-run `setup-network-security`. Changes take effect on the next `claude-in-container` run.
+To add a destination, append it to `~/.config/claude-in-container/allowed-egresses.conf`. Changes take effect on the next `claude-in-container` run — manifests are regenerated automatically.
 
 ## License
 

@@ -47,133 +47,41 @@ if [ "$REGISTRY_ONLY" -eq 0 ] || [ "$ACCESS_LOG" -eq 0 ]; then
                      --set meshConfig.accessLogFile=/dev/stdout -y
 fi
 
-mkdir -p "$MANIFESTS_DIR"
+CONFIG_DIR="$HOME/.config/claude-in-container"
+EGRESS_FILE="$CONFIG_DIR/allowed-egresses.conf"
 
-# Namespace — enables sidecar injection for all claude pods
-cat > "$MANIFESTS_DIR/istio-namespace.yaml" <<'EOF'
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: claude
-  labels:
-    istio-injection: enabled
+mkdir -p "$CONFIG_DIR"
+
+# Write the default egress allowlist only if it doesn't exist yet, so that
+# user edits survive re-runs of this script.
+if [ ! -f "$EGRESS_FILE" ]; then
+    cat > "$EGRESS_FILE" <<'EOF'
+# Allowed egress hostnames for the Claude container.
+# One hostname per line. Wildcards (e.g. *.example.com) are supported.
+# Lines starting with # are ignored.
+#
+# To add a destination, append it here and run claude-in-container as usual
+# — manifests are regenerated automatically on every pod start.
+api.anthropic.com
+statsig.anthropic.com
+github.com
+*.github.com
+registry.npmjs.org
 EOF
+    echo "Created: $EGRESS_FILE"
+else
+    echo "Kept existing: $EGRESS_FILE"
+fi
 
-# Sidecar — restricts Envoy's routing table to declared services only.
-# Each allowed external host must appear here AND have a ServiceEntry below.
-# With REGISTRY_ONLY, Envoy drops traffic to any host not in this list.
-cat > "$MANIFESTS_DIR/istio-sidecar.yaml" <<'EOF'
-apiVersion: networking.istio.io/v1beta1
-kind: Sidecar
-metadata:
-  name: default
-  namespace: claude
-spec:
-  egress:
-  - hosts:
-    - istio-system/*        # Istio control plane (required)
-    - ./api.anthropic.com
-    - ./statsig.anthropic.com
-    - ./github.com
-    - ./*.github.com
-    - ./registry.npmjs.org
-EOF
-
-# ServiceEntry — declares each allowed external host to the mesh.
-# To add a destination: add a ServiceEntry here and a matching host in istio-sidecar.yaml,
-# then re-run setup-network-security or: kubectl apply -f <manifests-dir>
-cat > "$MANIFESTS_DIR/istio-service-entries.yaml" <<'EOF'
-apiVersion: networking.istio.io/v1beta1
-kind: ServiceEntry
-metadata:
-  name: allow-anthropic-api
-  namespace: claude
-spec:
-  hosts:
-  - api.anthropic.com
-  ports:
-  - number: 443
-    name: https
-    protocol: HTTPS
-  resolution: DNS
-  location: MESH_EXTERNAL
----
-apiVersion: networking.istio.io/v1beta1
-kind: ServiceEntry
-metadata:
-  name: allow-anthropic-statsig
-  namespace: claude
-spec:
-  hosts:
-  - statsig.anthropic.com
-  ports:
-  - number: 443
-    name: https
-    protocol: HTTPS
-  resolution: DNS
-  location: MESH_EXTERNAL
----
-apiVersion: networking.istio.io/v1beta1
-kind: ServiceEntry
-metadata:
-  name: allow-github
-  namespace: claude
-spec:
-  hosts:
-  - github.com
-  ports:
-  - number: 443
-    name: https
-    protocol: HTTPS
-  resolution: DNS
-  location: MESH_EXTERNAL
----
-apiVersion: networking.istio.io/v1beta1
-kind: ServiceEntry
-metadata:
-  name: allow-github-wildcard
-  namespace: claude
-spec:
-  hosts:
-  - "*.github.com"
-  ports:
-  - number: 443
-    name: https
-    protocol: HTTPS
-  resolution: NONE
-  location: MESH_EXTERNAL
----
-apiVersion: networking.istio.io/v1beta1
-kind: ServiceEntry
-metadata:
-  name: allow-npm
-  namespace: claude
-spec:
-  hosts:
-  - registry.npmjs.org
-  ports:
-  - number: 443
-    name: https
-    protocol: HTTPS
-  resolution: DNS
-  location: MESH_EXTERNAL
-EOF
-
-echo "Written:"
-echo "  $MANIFESTS_DIR/istio-namespace.yaml"
-echo "  $MANIFESTS_DIR/istio-sidecar.yaml"
-echo "  $MANIFESTS_DIR/istio-service-entries.yaml"
 echo ""
 echo "Network hardening is now enabled. The next time you run claude-in-container it will:"
-echo "  1. Label the 'claude' namespace for Istio sidecar injection"
-echo "  2. Apply the Sidecar and ServiceEntry policies"
-echo "  3. Start the pod with hostNetwork=false (required for sidecar injection)"
+echo "  1. Generate Istio manifests from $EGRESS_FILE"
+echo "  2. Label the 'claude' namespace for Istio sidecar injection"
+echo "  3. Apply the Sidecar and ServiceEntry policies"
+echo "  4. Start the pod with hostNetwork=false (required for sidecar injection)"
 echo ""
-echo "Envoy will block all egress not declared in a ServiceEntry."
+echo "Envoy will block all egress not listed in:"
+echo "  $EGRESS_FILE"
 echo ""
 echo "To observe blocked traffic while Claude is running:"
 echo "  kubectl logs -n claude <pod-name> -c istio-proxy | grep BlackHoleCluster"
-echo ""
-echo "To add a destination, edit both files and re-run setup-network-security:"
-echo "  $MANIFESTS_DIR/istio-service-entries.yaml"
-echo "  $MANIFESTS_DIR/istio-sidecar.yaml"

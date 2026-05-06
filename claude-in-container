@@ -8,7 +8,9 @@ DOCKERFILE_DIR="$HOME/claude-in-container"
 IMAGE_NAME="claude-in-container"
 NAMESPACE="claude"
 TAG_FILE="$HOME/.config/claude-in-container/tag"
-MANIFESTS_DIR="$HOME/.config/claude-in-container/manifests"
+CONFIG_DIR="$HOME/.config/claude-in-container"
+EGRESS_FILE="$CONFIG_DIR/allowed-egresses.conf"
+MANIFESTS_DIR="$CONFIG_DIR/manifests"
 CLAUDE_HOME_DIR="$HOME/.local/share/claude-in-container/home"
 
 PROJECT_DIR="$(pwd)"
@@ -31,14 +33,95 @@ POD_NAME="claude-$POD_SUFFIX"
 
 mkdir -p "$CLAUDE_HOME_DIR/projects"
 
-# Enable host networking only when no egress manifests are present.
-# With Istio manifests installed, hostNetwork must be false for sidecar injection to work.
-if ls "$MANIFESTS_DIR"/*.yaml >/dev/null 2>&1; then
+# Enable egress control when allowed-egresses.conf exists (written by setup-network-security).
+# With Istio sidecar injection, hostNetwork must be false.
+if [ -f "$EGRESS_FILE" ]; then
     HOST_NETWORK="false"
     # Exclude host.docker.internal from Istio interception so host services remain reachable.
     # The annotation bypasses iptables rules for that IP — no port enumeration needed.
     HOST_DOCKER_IP=$(rdctl shell -- getent hosts host.docker.internal 2>/dev/null | awk '{print $1}')
     EXCLUDE_RANGES="${HOST_DOCKER_IP:+${HOST_DOCKER_IP}/32}"
+
+    # Generate Istio manifests from allowed-egresses.conf
+    mkdir -p "$MANIFESTS_DIR"
+
+    cat > "$MANIFESTS_DIR/istio-namespace.yaml" <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: $NAMESPACE
+  labels:
+    istio-injection: enabled
+EOF
+
+    # Build sidecar host list and service entries from the egress file.
+    # Wildcards use resolution: NONE (Istio can't DNS-resolve them);
+    # exact names use resolution: DNS.
+    SIDECAR_HOSTS="    - istio-system/*"
+    DNS_HOSTS=""
+    WILDCARD_HOSTS=""
+    while IFS= read -r line || [ -n "$line" ]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        SIDECAR_HOSTS+=$'\n'"    - ./$line"
+        if [[ "$line" == \** ]]; then
+            WILDCARD_HOSTS+=$'\n'"  - \"$line\""
+        else
+            DNS_HOSTS+=$'\n'"  - $line"
+        fi
+    done < "$EGRESS_FILE"
+
+    cat > "$MANIFESTS_DIR/istio-sidecar.yaml" <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: Sidecar
+metadata:
+  name: default
+  namespace: $NAMESPACE
+spec:
+  egress:
+  - hosts:
+$SIDECAR_HOSTS
+EOF
+
+    {
+        if [ -n "$DNS_HOSTS" ]; then
+            cat <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: allow-exact-hosts
+  namespace: $NAMESPACE
+spec:
+  hosts:
+$DNS_HOSTS
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+EOF
+        fi
+        if [ -n "$WILDCARD_HOSTS" ]; then
+            [ -n "$DNS_HOSTS" ] && echo "---"
+            cat <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: allow-wildcard-hosts
+  namespace: $NAMESPACE
+spec:
+  hosts:
+$WILDCARD_HOSTS
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: NONE
+  location: MESH_EXTERNAL
+EOF
+        fi
+    } > "$MANIFESTS_DIR/istio-service-entries.yaml"
 else
     HOST_NETWORK="true"
     EXCLUDE_RANGES=""
@@ -54,7 +137,7 @@ metadata:
   name: $NAMESPACE
 EOF
 
-# Apply egress-control manifests if present (written by setup-network-security)
+# Apply generated egress-control manifests
 if [ "$HOST_NETWORK" = "false" ]; then
     kubectl apply -f "$MANIFESTS_DIR"
 fi
@@ -110,6 +193,8 @@ spec:
 EOF
 
 kubectl wait --for=condition=Ready pod/"$POD_NAME" -n "$NAMESPACE" --timeout=60s
+
+[ "$HOST_NETWORK" = "false" ] && printf '\033[33mEgress control active — see README to detect and allowlist blocked traffic.\033[0m\n'
 
 kubectl exec -it "$POD_NAME" -n "$NAMESPACE" -- claude "$@"
 exit_code=$?

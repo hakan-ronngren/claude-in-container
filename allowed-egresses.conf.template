@@ -1,0 +1,29 @@
+# Allowed egress hostnames for the Claude container.
+# One hostname per line. Wildcards (e.g. *.example.com) are supported.
+# Lines starting with # are ignored.
+#
+# This is the default template. Your personal copy lives at:
+#   ~/.config/claude-in-container/allowed-egresses.conf
+# Edit that file to add destinations; changes take effect on the next run.
+
+# A
+*.anthropic.com
+
+# C
+claude.ai
+*.claude.ai
+*.claude.com
+
+# D
+deb.debian.org
+
+# G
+github.com
+*.github.com
+raw.githubusercontent.com
+packages.cloud.google.com
+*.googleapis.com
+
+# N
+deb.nodesource.com
+registry.npmjs.org

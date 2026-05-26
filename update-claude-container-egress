@@ -1,0 +1,113 @@
+#!/bin/bash
+
+# update-claude-container-egress - Regenerate and apply Istio egress manifests
+#
+# Called automatically by claude-in-container on each pod start.
+# Run manually to apply allowlist changes while a session is already running:
+#
+#   1. Edit ~/.config/claude-in-container/allowed-egresses.conf
+#   2. Run update-claude-container-egress
+
+set -e
+
+NAMESPACE="claude"
+CONFIG_DIR="$HOME/.config/claude-in-container"
+EGRESS_FILE="$CONFIG_DIR/allowed-egresses.conf"
+MANIFESTS_DIR="$CONFIG_DIR/manifests"
+
+KUBECTL="kubectl --context rancher-desktop"
+
+if [ ! -f "$EGRESS_FILE" ]; then
+    echo "ERROR: $EGRESS_FILE not found." >&2
+    echo "       Run claude-in-container once to create it from the template." >&2
+    exit 1
+fi
+
+mkdir -p "$MANIFESTS_DIR"
+
+cat > "$MANIFESTS_DIR/istio-namespace.yaml" <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: $NAMESPACE
+  labels:
+    istio-injection: enabled
+EOF
+
+# Build sidecar host list and service entries from the egress file.
+# Wildcards use resolution: NONE (Istio can't DNS-resolve them);
+# exact names use resolution: DNS.
+SIDECAR_HOSTS="    - istio-system/*"
+DNS_HOSTS=""
+WILDCARD_HOSTS=""
+while IFS= read -r line || [ -n "$line" ]; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${line// }" ]] && continue
+    SIDECAR_HOSTS+=$'\n'"    - ./$line"
+    if [[ "$line" == \** ]]; then
+        WILDCARD_HOSTS+=$'\n'"  - \"$line\""
+    else
+        DNS_HOSTS+=$'\n'"  - $line"
+    fi
+done < "$EGRESS_FILE"
+
+cat > "$MANIFESTS_DIR/istio-sidecar.yaml" <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: Sidecar
+metadata:
+  name: default
+  namespace: $NAMESPACE
+spec:
+  egress:
+  - hosts:
+$SIDECAR_HOSTS
+EOF
+
+{
+    if [ -n "$DNS_HOSTS" ]; then
+        cat <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: allow-exact-hosts
+  namespace: $NAMESPACE
+spec:
+  hosts:
+$DNS_HOSTS
+  ports:
+  - number: 80
+    name: http
+    protocol: HTTP
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+EOF
+    fi
+    if [ -n "$WILDCARD_HOSTS" ]; then
+        [ -n "$DNS_HOSTS" ] && echo "---"
+        cat <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: allow-wildcard-hosts
+  namespace: $NAMESPACE
+spec:
+  hosts:
+$WILDCARD_HOSTS
+  ports:
+  - number: 80
+    name: http
+    protocol: HTTP
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: NONE
+  location: MESH_EXTERNAL
+EOF
+    fi
+} > "$MANIFESTS_DIR/istio-service-entries.yaml"
+
+${KUBECTL} apply -f "$MANIFESTS_DIR" >/dev/null
+echo "Egress manifests applied from $EGRESS_FILE"

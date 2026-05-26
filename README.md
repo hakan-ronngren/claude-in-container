@@ -8,6 +8,7 @@ Runs Claude Code in a Kubernetes pod, persisting your credentials, preferences, 
   - **dockerd** or **containerd** as the container engine (Preferences → Container Engine) — `build` detects which is active and uses `docker` or `nerdctl` accordingly
   - Kubernetes enabled (Preferences → Kubernetes)
 - A valid Claude subscription
+- [Istio](https://istio.io/) installed in your Rancher Desktop cluster (see [Egress control](#egress-control) below)
 
 ## Install
 
@@ -19,6 +20,7 @@ Runs Claude Code in a Kubernetes pod, persisting your credentials, preferences, 
    ln -s $PWD/claude-in-container ~/.local/bin
    ln -s $PWD/shell-in-claude-container ~/.local/bin
    ln -s $PWD/show-blocked-claude-container-egress ~/.local/bin
+   ln -s $PWD/update-claude-container-egress ~/.local/bin
    ```
 
 ## Adapt to your needs
@@ -81,15 +83,25 @@ This creates a fresh pod but resumes your previous session, since session data p
 
 ## Reaching host services from inside the pod
 
-By default the pod runs with `hostNetwork: true`, so services on the host are reachable at `localhost` or `host.docker.internal` (both resolve to the host).
+The pod runs with `hostNetwork: false`. `host.docker.internal` resolves to the host and, in the default (controlled) mode, bypasses the Istio sidecar — host services remain fully accessible.
 
-When egress control is enabled (see below), `hostNetwork` is set to `false`, but `host.docker.internal` still resolves to the host and bypasses the Istio sidecar, so host services remain fully accessible.
+## Egress control
 
-## Egress control (optional)
+`claude-in-container` runs pods in one of two Kubernetes namespaces depending on the session type:
 
-You can restrict the pod's outbound network access to an explicit allowlist using [Istio](https://istio.io/). This is an opt-in hardening step that works with flannel (Rancher Desktop's default CNI) and either container engine.
+| Mode | Namespace | Egress |
+|---|---|---|
+| Default | `claude` | Restricted to an explicit allowlist via Istio |
+| Unrestricted | `claude-insecure` | No restrictions |
 
-### Prerequisites
+```bash
+claude-in-container            # controlled egress
+claude-in-container --insecure # unrestricted egress
+```
+
+Use `--insecure` when you need broad web access, such as open research sessions.
+
+### Prerequisites (one-time cluster setup)
 
 Get the `istioctl` command unless you have it already:
 
@@ -109,20 +121,22 @@ istioctl install --set profile=minimal \
 
 Full getting-started guide: [istio.io/latest/docs/setup/getting-started/](https://istio.io/latest/docs/setup/getting-started/)
 
-### Enable egress control
+After this one-time setup, `claude-in-container` handles the rest automatically: it verifies the mesh configuration on each run, creates your allowlist file from the template if it doesn't exist yet, and applies the Istio manifests before starting the pod.
 
-```bash
-./setup-network-security
-```
+### Customising the allowlist
 
-This creates `~/.config/claude-in-container/allowed-egresses.conf` with an initial allowlist:
+On first run, `claude-in-container` copies `allowed-egresses.conf.template` (from this repo) to `~/.config/claude-in-container/allowed-egresses.conf`. Edit the `~/.config/` copy to add or remove destinations — the template is never modified.
 
-- `api.anthropic.com:443`
-- `statsig.anthropic.com:443`
-- `github.com:443` / `*.github.com:443`
-- `registry.npmjs.org:443`
+Each line is a hostname. Wildcards (e.g. `*.example.com`) are supported. Lines starting with `#` are ignored. Changes take effect on the next `claude-in-container` run.
 
-From that point on, `claude-in-container` generates Istio manifests from that file and applies them before starting each pod, injecting an Envoy sidecar that blocks all other outbound traffic.
+### Updating the allowlist mid-session
+
+To apply allowlist changes without restarting the pod:
+
+1. Edit `~/.config/claude-in-container/allowed-egresses.conf`
+2. Run `update-claude-container-egress`
+
+Istio applies the new rules immediately; the running pod picks them up without interruption.
 
 ### Discovering blocked traffic
 
@@ -133,8 +147,6 @@ show-blocked-claude-container-egress
 ```
 
 This streams `BlackHoleCluster` entries from the Istio sidecar access log — one line per blocked connection, including the destination hostname or IP.
-
-To add a destination, append it to `~/.config/claude-in-container/allowed-egresses.conf`. Changes take effect on the next `claude-in-container` run — manifests are regenerated automatically.
 
 ## License
 

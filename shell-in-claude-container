@@ -4,35 +4,46 @@
 
 set -e
 
-NAMESPACE="claude"
-
 kubectl config use-context rancher-desktop >/dev/null
 
+NAMESPACES=("claude" "claude-insecure")
+
 PODS=()
-while IFS= read -r pod; do
-    [ -n "$pod" ] && PODS+=("$pod")
-done < <(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+POD_NAMESPACES=()
+for ns in "${NAMESPACES[@]}"; do
+    while IFS= read -r pod; do
+        if [ -n "$pod" ]; then
+            PODS+=("$pod")
+            POD_NAMESPACES+=("$ns")
+        fi
+    done < <(kubectl get pods -n "$ns" --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+done
 
 if [ ${#PODS[@]} -eq 0 ]; then
-    echo "No running Claude pod found in namespace '$NAMESPACE'." >&2
+    echo "No running Claude pod found in namespaces: ${NAMESPACES[*]}." >&2
     exit 1
 fi
 
 LABELS=()
-for pod in "${PODS[@]}"; do
-    project=$(kubectl get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.containers[0].workingDir}')
-    LABELS+=("$pod  ($project)")
+for i in "${!PODS[@]}"; do
+    pod="${PODS[$i]}"
+    ns="${POD_NAMESPACES[$i]}"
+    project=$(kubectl get pod "$pod" -n "$ns" -o jsonpath='{.spec.containers[0].workingDir}')
+    LABELS+=("[$ns] $pod  ($project)")
 done
 
 if [ ${#PODS[@]} -eq 1 ]; then
-    POD_NAME="${PODS[0]}"
+    IDX=0
 else
     PS3="Choose a pod: "
     select label in "${LABELS[@]}"; do
-        [ -n "$label" ] && POD_NAME="${PODS[$((REPLY-1))]}" && break
+        [ -n "$label" ] && IDX=$((REPLY-1)) && break
         echo "Invalid choice." >&2
     done
 fi
 
-echo "Attaching to $POD_NAME..."
-kubectl exec -it "$POD_NAME" -n "$NAMESPACE" -- /bin/bash
+POD_NAME="${PODS[$IDX]}"
+NS="${POD_NAMESPACES[$IDX]}"
+
+echo "Attaching to $POD_NAME ($NS)..."
+kubectl exec -it "$POD_NAME" -n "$NS" -- /bin/bash

@@ -83,7 +83,7 @@ This creates a fresh pod but resumes your previous session, since session data p
 
 ## Reaching host services from inside the pod
 
-The pod runs with `hostNetwork: false`. `host.docker.internal` resolves to the host and, in the default (controlled) mode, bypasses the Istio sidecar — host services remain fully accessible.
+The pod always runs with `hostNetwork: false`, so `localhost` refers to the pod's own loopback — it does **not** reach the host. Use `host.docker.internal` instead. In the default (controlled) mode, `host.docker.internal` bypasses the Istio sidecar, so host services remain fully accessible.
 
 ## Egress control
 
@@ -139,6 +139,8 @@ To apply allowlist changes without restarting the pod:
 Istio applies the new rules immediately; the running pod picks them up without interruption.
 
 ### Discovering blocked traffic
+
+This only applies to the default (controlled egress) mode. In `--insecure` mode there is no Istio sidecar, so there is no blocked-traffic log to stream.
 
 Run this in a separate terminal while Claude is active:
 

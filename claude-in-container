@@ -127,13 +127,18 @@ fi
 
 trap "${KUBECTL} delete pod $POD_NAME -n $NAMESPACE --ignore-not-found --grace-period=2 >/dev/null 2>&1" EXIT
 
-# Create namespace (without istio-injection label — the secure path applies its own labelled manifest above)
-${KUBECTL} apply -f - >/dev/null <<EOF
+# For --insecure, create the namespace if it doesn't exist.
+# For the default (secure) path, update-claude-container-egress already applied
+# the namespace with the istio-injection: enabled label; applying it again here
+# without that label would strip it and disable sidecar injection.
+if $INSECURE; then
+    ${KUBECTL} apply -f - >/dev/null <<EOF
 apiVersion: v1
 kind: Namespace
 metadata:
   name: $NAMESPACE
 EOF
+fi
 
 ${KUBECTL} apply -f - >/dev/null <<EOF
 apiVersion: v1

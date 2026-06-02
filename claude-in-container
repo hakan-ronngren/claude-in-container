@@ -15,7 +15,6 @@ MOUNTS_FILE="$CONFIG_DIR/mounts.conf"
 CLAUDE_HOME_DIR="$HOME/.local/share/claude-in-container/home"
 
 PROJECT_DIR="$(pwd)"
-PROJECT_NAME="$(basename "$PROJECT_DIR")"
 
 # Parse --insecure before forwarding the rest to claude
 INSECURE=false
@@ -155,7 +154,7 @@ spec:
     - name: claude
       image: $IMAGE_NAME:$IMAGE_TAG
       imagePullPolicy: Never
-      workingDir: /home/claude/projects/$PROJECT_NAME
+      workingDir: $PROJECT_DIR
       command: ["sleep", "infinity"]
       env:
         - name: HOME
@@ -179,7 +178,7 @@ ${EXTRA_ENV}
         - name: claude-home
           mountPath: /home/claude
         - name: project
-          mountPath: /home/claude/projects/$PROJECT_NAME
+          mountPath: $PROJECT_DIR
 ${EXTRA_VOLUME_MOUNTS}
   volumes:
     - name: claude-home

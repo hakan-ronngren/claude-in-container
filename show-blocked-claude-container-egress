@@ -31,7 +31,7 @@ done
 if [ ${#SIDECAR_PODS[@]} -eq 0 ]; then
     echo "No running Claude pod with an Istio sidecar found." >&2
     echo "This tool only works in the default (controlled egress) mode." >&2
-    echo "Pods started with --insecure have no Istio sidecar." >&2
+    echo "Pods started with --cic-insecure have no Istio sidecar." >&2
     exit 1
 fi
 

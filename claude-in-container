@@ -16,17 +16,103 @@ CLAUDE_HOME_DIR="$HOME/.local/share/claude-in-container/home"
 
 PROJECT_DIR="$(pwd)"
 
-# Parse --insecure before forwarding the rest to claude
+# Parse our own flags before forwarding the rest to claude
 INSECURE=false
+CIC_FEATURE=""
 CLAUDE_ARGS=()
-for arg in "$@"; do
-    [[ "$arg" == "--insecure" ]] && INSECURE=true || CLAUDE_ARGS+=("$arg")
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --cic-insecure)
+            INSECURE=true
+            ;;
+        --cic-feature)
+            if [ -z "${2:-}" ]; then
+                echo "ERROR: --cic-feature requires a NAME argument." >&2
+                exit 1
+            fi
+            CIC_FEATURE="$2"
+            shift
+            ;;
+        *)
+            CLAUDE_ARGS+=("$1")
+            ;;
+    esac
+    shift
 done
 
 if $INSECURE; then
     NAMESPACE="claude-insecure"
 else
     NAMESPACE="claude"
+fi
+
+# With --cic-feature <NAME>, work in a dedicated clone of the current repo's
+# 'origin' instead of the current directory. The clone lives at
+# ~/.claude/cic-features/<REPO>/<NAME> and persists across sessions, so the
+# same feature can be re-entered later by passing the same NAME.
+if [ -n "$CIC_FEATURE" ]; then
+    if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || [ -z "$REPO_ROOT" ]; then
+        echo "ERROR: --cic-feature must be run from inside a git clone." >&2
+        exit 1
+    fi
+    if ! ORIGIN_URL="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null)" || [ -z "$ORIGIN_URL" ]; then
+        echo "ERROR: repository at '$REPO_ROOT' has no 'origin' remote to clone from." >&2
+        exit 1
+    fi
+    # Derive a canonical repo name from the remote URL (independent of the local
+    # directory name): strip any trailing slash, take the last path segment, drop .git.
+    REPO_NAME="${ORIGIN_URL%/}"
+    REPO_NAME="${REPO_NAME##*[:/]}"
+    REPO_NAME="${REPO_NAME%.git}"
+    FEATURE_DIR="$HOME/.claude/cic-features/$REPO_NAME/$CIC_FEATURE"
+    if [ -d "$FEATURE_DIR" ]; then
+        echo "Reusing existing feature clone at $FEATURE_DIR"
+    else
+        echo "Creating feature clone '$CIC_FEATURE' for '$REPO_NAME' at $FEATURE_DIR ..."
+        mkdir -p "$(dirname "$FEATURE_DIR")"
+        git clone "$ORIGIN_URL" "$FEATURE_DIR"
+
+        # Seed the fresh clone from the host working copy using .worktreeinclude
+        # (.gitignore-style syntax). Since the clone comes from 'origin', untracked
+        # local files (e.g. .env, caches, build output) and any uncommitted edits
+        # are absent otherwise — this is the worktree-equivalent copy step, except
+        # the container can never reach the host clone, so what isn't copied stays
+        # invisible to it. '*' matches within a path segment, '**' across segments;
+        # each pattern is anchored to the repo root, so use '**/' to match at any
+        # depth. '#' comments and blank lines are ignored.
+        WORKTREE_INCLUDE="$REPO_ROOT/.worktreeinclude"
+        if [ -f "$WORKTREE_INCLUDE" ]; then
+            (
+                cd "$REPO_ROOT"
+                shopt -s globstar dotglob nullglob
+                matches=()
+                while IFS= read -r pattern || [ -n "$pattern" ]; do
+                    pattern="${pattern%$'\r'}"                        # strip CR (CRLF files)
+                    pattern="${pattern#"${pattern%%[![:space:]]*}"}"  # trim leading whitespace
+                    pattern="${pattern%"${pattern##*[![:space:]]}"}"  # trim trailing whitespace
+                    if [ -z "$pattern" ] || [ "${pattern:0:1}" = "#" ]; then
+                        continue
+                    fi
+                    pattern="${pattern#/}"                            # patterns are root-anchored already
+                    pattern="${pattern%/}"                            # trailing slash (dir) — copy the dir
+                    for match in $pattern; do
+                        if [ ! -e "$match" ] || [ "$match" = ".git" ]; then
+                            continue
+                        fi
+                        case "$match" in .git/*) continue ;; esac
+                        matches+=("$match")
+                    done
+                done < .worktreeinclude
+                if [ ${#matches[@]} -gt 0 ]; then
+                    # tar preserves the relative paths and merges into the clone
+                    # (overwriting tracked files, never nesting directories).
+                    tar -cf - "${matches[@]}" | tar -C "$FEATURE_DIR" -xpf -
+                    printf 'Applied .worktreeinclude: copied %d path(s) into the clone\n' "${#matches[@]}"
+                fi
+            )
+        fi
+    fi
+    PROJECT_DIR="$FEATURE_DIR"
 fi
 
 # Check that the image has been built
@@ -56,7 +142,7 @@ if ! $INSECURE; then
         echo "                          --set meshConfig.outboundTrafficPolicy.mode=REGISTRY_ONLY \\" >&2
         echo "                          --set meshConfig.accessLogFile=/dev/stdout -y" >&2
         echo "" >&2
-        echo "       Or start an unrestricted session with: claude-in-container --insecure" >&2
+        echo "       Or start an unrestricted session with: claude-in-container --cic-insecure" >&2
         exit 1
     fi
 
@@ -126,7 +212,7 @@ fi
 
 trap "${KUBECTL} delete pod $POD_NAME -n $NAMESPACE --ignore-not-found --grace-period=2 >/dev/null 2>&1" EXIT
 
-# For --insecure, create the namespace if it doesn't exist.
+# For --cic-insecure, create the namespace if it doesn't exist.
 # For the default (secure) path, update-claude-container-egress already applied
 # the namespace with the istio-injection: enabled label; applying it again here
 # without that label would strip it and disable sidecar injection.

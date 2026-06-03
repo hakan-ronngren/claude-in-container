@@ -64,6 +64,31 @@ The pod's home directory `/home/claude` is mounted from `~/.local/share/claude-i
 
 On the very first run, Claude Code installs itself into `/home/claude` before starting. This takes about a minute and only happens once — subsequent runs skip straight to Claude. After installation, Claude will prompt you to log in; your credentials are stored in `/home/claude` and reused in every subsequent session.
 
+### Feature workspaces — `--cic-feature`
+
+When you run `claude-in-container --cic-feature <NAME>` from inside any git clone (the
+current directory does not have to be the repository root), the session works in a
+dedicated clone of the repository's `origin` instead of your current directory:
+
+```bash
+claude-in-container --cic-feature add-login
+```
+
+This resembles how Claude works with Git worktrees, but it works around the common
+issues with Claude suddenly deciding to escape from the worktree and start working
+in the main clone instead.
+
+The clone is created at `~/.claude/cic-features/<REPO>/<NAME>`, where `<REPO>` is the
+repository name taken from the `origin` URL (so it is canonical regardless of what you
+named your local clone directory), and it becomes the pod's working directory.
+The clone persists across sessions, so re-running with the same `<NAME>` reuses the
+existing clone rather than cloning again — letting you re-enter a feature workspace
+later. This keeps each piece of work fully isolated in its own checkout, similar to
+`git worktree` but as independent clones.
+
+Because the clone is made from `origin`, the repository must have an `origin` remote,
+and uncommitted or unpushed local changes in your working copy are not carried over.
+
 ### Resuming sessions
 
 When you exit Claude, it prints a message like:
@@ -96,10 +121,10 @@ The pod always runs with `hostNetwork: false`, so `localhost` refers to the pod'
 
 ```bash
 claude-in-container            # controlled egress
-claude-in-container --insecure # unrestricted egress
+claude-in-container --cic-insecure # unrestricted egress
 ```
 
-Use `--insecure` when you need broad web access, such as open research sessions.
+Use `--cic-insecure` when you need broad web access, such as open research sessions.
 
 ### Prerequisites (one-time cluster setup)
 
@@ -140,7 +165,7 @@ Istio applies the new rules immediately; the running pod picks them up without i
 
 ### Discovering blocked traffic
 
-This only applies to the default (controlled egress) mode. In `--insecure` mode there is no Istio sidecar, so there is no blocked-traffic log to stream.
+This only applies to the default (controlled egress) mode. In `--cic-insecure` mode there is no Istio sidecar, so there is no blocked-traffic log to stream.
 
 Run this in a separate terminal while Claude is active:
 

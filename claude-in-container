@@ -84,6 +84,11 @@ while [ $# -gt 0 ]; do
                 exit 1
             fi
             CIC_FEATURE="$2"
+            # Validate feature name: no slashes or asterisks (used in path construction)
+            if [[ "$CIC_FEATURE" =~ [/*] ]]; then
+                echo "ERROR: feature name cannot contain slashes or asterisks." >&2
+                exit 1
+            fi
             shift
             ;;
         *)
@@ -120,10 +125,22 @@ if [ -n "$CIC_FEATURE" ]; then
     FEATURE_DIR="$HOME/.claude/cic-features/$REPO_NAME/$CIC_FEATURE"
     if [ -d "$FEATURE_DIR" ]; then
         echo "Reusing existing feature clone at $FEATURE_DIR"
+        # Switch to or create the branch matching the feature name
+        if git -C "$FEATURE_DIR" rev-parse --verify "$CIC_FEATURE" >/dev/null 2>&1; then
+            echo "Switching to existing branch '$CIC_FEATURE'"
+            git -C "$FEATURE_DIR" checkout "$CIC_FEATURE"
+        else
+            echo "Creating new branch '$CIC_FEATURE'"
+            git -C "$FEATURE_DIR" checkout -b "$CIC_FEATURE"
+        fi
     else
         echo "Creating feature clone '$CIC_FEATURE' for '$REPO_NAME' at $FEATURE_DIR ..."
         mkdir -p "$(dirname "$FEATURE_DIR")"
         git clone "$ORIGIN_URL" "$FEATURE_DIR"
+
+        # Create and switch to the feature branch
+        echo "Creating new branch '$CIC_FEATURE'"
+        git -C "$FEATURE_DIR" checkout -b "$CIC_FEATURE"
 
         seed_worktree_include "$REPO_ROOT" "$FEATURE_DIR"
     fi

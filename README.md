@@ -1,13 +1,15 @@
 # claude-in-container
 
-Runs Claude Code in a Kubernetes pod, persisting your credentials, preferences, and session information in a directory on your host, separate from your home directory.
+Run Claude Code in a sandbox that can't touch your home directory or reach the wider internet, so you can let it work freely without watching every command. It also gives each feature its own isolated clone — a workflow Claude handles more reliably than git worktrees. Your credentials, preferences, and sessions persist between runs, kept separate from the ones on your host.
 
 ## System requirements
 
+`claude-in-container` is built and tested on a Mac. You will need:
+
+- A Claude subscription
 - [Rancher Desktop](https://rancherdesktop.io/)
   - **dockerd** or **containerd** as the container engine (Preferences → Container Engine) — `build` detects which is active and uses `docker` or `nerdctl` accordingly
   - Kubernetes enabled (Preferences → Kubernetes)
-- A valid Claude subscription
 - [Istio](https://istio.io/) installed in your Rancher Desktop cluster (see [Egress control](#egress-control) below)
 
 ## Install
@@ -63,6 +65,27 @@ Run `claude-in-container` from inside any project directory, the way you would u
 The pod's home directory `/home/claude` is mounted from `~/.local/share/claude-in-container/home` on your host, so its contents persist across sessions even though the pod itself is ephemeral.
 
 On the very first run, Claude Code installs itself into `/home/claude` before starting. This takes about a minute and only happens once — subsequent runs skip straight to Claude. After installation, Claude will prompt you to log in; your credentials are stored in `/home/claude` and reused in every subsequent session.
+
+**Tip: skip the permission prompts.** Because the pod already isolates your
+credentials and controls egress, you can let Claude run tools without asking for
+approval each time. Rather than passing `--dangerously-skip-permissions` on every
+launch, make it the default for every session by adding a `"permissions"` block
+to `~/.local/share/claude-in-container/home/.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  ... (other settings) ...
+}
+```
+
+This setting lives in the container's mounted home, so it only affects sessions
+inside the sandbox and never your host's Claude install. (A couple of guardrail
+commands such as `rm -rf /` still prompt as a safety check.) Claude runs as the
+non-root `claude` user in the pod, so bypass mode is permitted — outside a sandbox
+it would be refused for root/sudo sessions.
 
 ### Feature workspaces — `--cic-feature`
 

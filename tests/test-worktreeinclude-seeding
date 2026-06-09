@@ -1,0 +1,50 @@
+#!/opt/homebrew/bin/bash
+#
+# Behavioral test for the .worktreeinclude seeding step of claude-in-container.
+#
+# It drives the script's internal seeding hook (--cic-internal-seed) directly,
+# so it exercises the real code under the script's real shebang without needing
+# a Kubernetes cluster. Covers: dotfiles, '**' globstar across path segments,
+# comment/blank-line skipping, and .git exclusion.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CIC="$SCRIPT_DIR/claude-in-container"
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+REPO_ROOT="$WORK/source"
+FEATURE_DIR="$WORK/clone"
+mkdir -p "$REPO_ROOT/config" "$REPO_ROOT/.git" "$FEATURE_DIR"
+
+# Untracked / local files the worktree-equivalent copy must carry over.
+printf 'SECRET=1\n'      > "$REPO_ROOT/.env"
+printf 'nested-secret\n' > "$REPO_ROOT/config/secret.local"
+printf 'do-not-copy\n'   > "$REPO_ROOT/config/keep.txt"
+printf 'git-internal\n'  > "$REPO_ROOT/.git/should-not-copy"
+
+cat > "$REPO_ROOT/.worktreeinclude" <<'EOF'
+# carry the local env file and any *.local at any depth
+
+.env
+**/*.local
+EOF
+
+"$CIC" --cic-internal-seed "$REPO_ROOT" "$FEATURE_DIR"
+
+fail() { echo "FAIL: $1" >&2; exit 1; }
+
+[ -f "$FEATURE_DIR/.env" ] \
+    || fail ".env (dotfile) was not copied into the clone"
+grep -q 'SECRET=1' "$FEATURE_DIR/.env" \
+    || fail ".env contents not preserved"
+[ -f "$FEATURE_DIR/config/secret.local" ] \
+    || fail "**/*.local (globstar across segments) did not match config/secret.local"
+[ ! -e "$FEATURE_DIR/config/keep.txt" ] \
+    || fail "config/keep.txt was copied but no pattern selected it"
+[ ! -e "$FEATURE_DIR/.git" ] \
+    || fail ".git was copied but must always be excluded"
+
+echo "PASS: .worktreeinclude seeding copied the expected paths"

@@ -1,6 +1,9 @@
-#!/bin/bash
+#!/opt/homebrew/bin/bash
 
 # claude-in-container - Start Claude Code in a Kubernetes pod
+#
+# Requires Homebrew bash (>= 4) — macOS /bin/bash is 3.2 and lacks `globstar`,
+# which the .worktreeinclude seeding depends on. Install with `brew install bash`.
 
 set -e
 
@@ -15,6 +18,56 @@ MOUNTS_FILE="$CONFIG_DIR/mounts.conf"
 CLAUDE_HOME_DIR="$HOME/.local/share/claude-in-container/home"
 
 PROJECT_DIR="$(pwd)"
+
+# Seed a freshly created clone (feature_dir) from the host working copy
+# (repo_root) using .worktreeinclude (.gitignore-style syntax). Since the clone
+# comes from 'origin', untracked local files (e.g. .env, caches, build output)
+# and any uncommitted edits are absent otherwise — this is the worktree-equivalent
+# copy step, except the container can never reach the host clone, so what isn't
+# copied stays invisible to it. '*' matches within a path segment, '**' across
+# segments (requires bash globstar, hence bash >= 4); each pattern is anchored to
+# the repo root, so use '**/' to match at any depth. '#' comments and blank lines
+# are ignored.
+seed_worktree_include() {
+    local repo_root="$1" feature_dir="$2"
+    local worktree_include="$repo_root/.worktreeinclude"
+    [ -f "$worktree_include" ] || return 0
+    (
+        cd "$repo_root"
+        shopt -s globstar dotglob nullglob
+        local matches=() pattern match
+        while IFS= read -r pattern || [ -n "$pattern" ]; do
+            pattern="${pattern%$'\r'}"                        # strip CR (CRLF files)
+            pattern="${pattern#"${pattern%%[![:space:]]*}"}"  # trim leading whitespace
+            pattern="${pattern%"${pattern##*[![:space:]]}"}"  # trim trailing whitespace
+            if [ -z "$pattern" ] || [ "${pattern:0:1}" = "#" ]; then
+                continue
+            fi
+            pattern="${pattern#/}"                            # patterns are root-anchored already
+            pattern="${pattern%/}"                            # trailing slash (dir) — copy the dir
+            for match in $pattern; do
+                if [ ! -e "$match" ] || [ "$match" = ".git" ]; then
+                    continue
+                fi
+                case "$match" in .git/*) continue ;; esac
+                matches+=("$match")
+            done
+        done < .worktreeinclude
+        if [ ${#matches[@]} -gt 0 ]; then
+            # tar preserves the relative paths and merges into the clone
+            # (overwriting tracked files, never nesting directories).
+            tar -cf - "${matches[@]}" | tar -C "$feature_dir" -xpf -
+            printf 'Applied .worktreeinclude: copied %d path(s) into the clone\n' "${#matches[@]}"
+        fi
+    )
+}
+
+# Internal hook for the test suite: run only the seeding step and exit. Keeps the
+# behavior testable without standing up a Kubernetes cluster.
+if [ "${1:-}" = "--cic-internal-seed" ]; then
+    seed_worktree_include "$2" "$3"
+    exit 0
+fi
 
 # Parse our own flags before forwarding the rest to claude
 INSECURE=false
@@ -72,45 +125,7 @@ if [ -n "$CIC_FEATURE" ]; then
         mkdir -p "$(dirname "$FEATURE_DIR")"
         git clone "$ORIGIN_URL" "$FEATURE_DIR"
 
-        # Seed the fresh clone from the host working copy using .worktreeinclude
-        # (.gitignore-style syntax). Since the clone comes from 'origin', untracked
-        # local files (e.g. .env, caches, build output) and any uncommitted edits
-        # are absent otherwise — this is the worktree-equivalent copy step, except
-        # the container can never reach the host clone, so what isn't copied stays
-        # invisible to it. '*' matches within a path segment, '**' across segments;
-        # each pattern is anchored to the repo root, so use '**/' to match at any
-        # depth. '#' comments and blank lines are ignored.
-        WORKTREE_INCLUDE="$REPO_ROOT/.worktreeinclude"
-        if [ -f "$WORKTREE_INCLUDE" ]; then
-            (
-                cd "$REPO_ROOT"
-                shopt -s globstar dotglob nullglob
-                matches=()
-                while IFS= read -r pattern || [ -n "$pattern" ]; do
-                    pattern="${pattern%$'\r'}"                        # strip CR (CRLF files)
-                    pattern="${pattern#"${pattern%%[![:space:]]*}"}"  # trim leading whitespace
-                    pattern="${pattern%"${pattern##*[![:space:]]}"}"  # trim trailing whitespace
-                    if [ -z "$pattern" ] || [ "${pattern:0:1}" = "#" ]; then
-                        continue
-                    fi
-                    pattern="${pattern#/}"                            # patterns are root-anchored already
-                    pattern="${pattern%/}"                            # trailing slash (dir) — copy the dir
-                    for match in $pattern; do
-                        if [ ! -e "$match" ] || [ "$match" = ".git" ]; then
-                            continue
-                        fi
-                        case "$match" in .git/*) continue ;; esac
-                        matches+=("$match")
-                    done
-                done < .worktreeinclude
-                if [ ${#matches[@]} -gt 0 ]; then
-                    # tar preserves the relative paths and merges into the clone
-                    # (overwriting tracked files, never nesting directories).
-                    tar -cf - "${matches[@]}" | tar -C "$FEATURE_DIR" -xpf -
-                    printf 'Applied .worktreeinclude: copied %d path(s) into the clone\n' "${#matches[@]}"
-                fi
-            )
-        fi
+        seed_worktree_include "$REPO_ROOT" "$FEATURE_DIR"
     fi
     PROJECT_DIR="$FEATURE_DIR"
 fi

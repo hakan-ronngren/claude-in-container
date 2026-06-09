@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/opt/homebrew/bin/bash
 
 # update-claude-container-egress - Regenerate and apply Istio egress manifests
 #

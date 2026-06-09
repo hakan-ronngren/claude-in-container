@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/opt/homebrew/bin/bash
 
 # show-blocked-egress - Stream egress connections blocked by the Istio sidecar
 #

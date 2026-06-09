@@ -7,6 +7,11 @@ Run Claude Code in a sandbox that can't touch your home directory or reach the w
 `claude-in-container` is built and tested on a Mac. You will need:
 
 - A Claude subscription
+- **Bash ≥ 4, installed via [Homebrew](https://brew.sh/)** (`brew install bash`). The
+  scripts use features such as `globstar` that the macOS system `/bin/bash` (version
+  3.2) does not support, so their shebangs point at Homebrew's bash at
+  `/opt/homebrew/bin/bash` (Apple Silicon). On an Intel Mac, Homebrew installs it at
+  `/usr/local/bin/bash`; update the shebang lines accordingly.
 - [Rancher Desktop](https://rancherdesktop.io/)
   - **dockerd** or **containerd** as the container engine (Preferences → Container Engine) — `build` detects which is active and uses `docker` or `nerdctl` accordingly
   - Kubernetes enabled (Preferences → Kubernetes)

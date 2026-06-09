@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/opt/homebrew/bin/bash
 
 # shell-in-claude-container - Start a shell in an existing Claude Code container
 

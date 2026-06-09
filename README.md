@@ -106,13 +106,19 @@ This resembles how Claude works with Git worktrees, but it works around the comm
 issues with Claude suddenly deciding to escape from the worktree and start working
 in the main clone instead.
 
-The clone is created at `~/.claude/cic-features/<REPO>/<NAME>`, where `<REPO>` is the
-repository name taken from the `origin` URL (so it is canonical regardless of what you
-named your local clone directory), and it becomes the pod's working directory.
-The clone persists across sessions, so re-running with the same `<NAME>` reuses the
-existing clone rather than cloning again — letting you re-enter a feature workspace
-later. This keeps each piece of work fully isolated in its own checkout, similar to
-`git worktree` but as independent clones.
+The clone is created at `<repo-root>/.claude/cic-features/<NAME>` within your current
+repository, and it becomes the pod's working directory. The clone persists across
+sessions, so re-running with the same `<NAME>` reuses the existing clone rather than
+cloning again — letting you re-enter a feature workspace later. This keeps each piece
+of work fully isolated in its own checkout, similar to `git worktree` but as
+independent clones.
+
+The `.claude/cic-features` directory is automatically added to `.git/info/exclude`,
+so feature clones don't appear in `git status`. Since feature clones are subdirectories
+of the main repository, they inherit trust from the parent — **as long as you've run
+`claude-in-container` in the main clone at least once** (without `--cic-feature`, so
+that the parent repository itself is trusted). Once that's done, all feature clones
+will be trusted automatically.
 
 Because the clone is made from `origin`, the repository must have an `origin` remote,
 and uncommitted or unpushed local changes in your working copy are not carried over.

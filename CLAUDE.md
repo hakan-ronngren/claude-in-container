@@ -23,7 +23,7 @@ The pod mounts:
 - `~/.local/share/claude-in-container/home` → `/home/claude` (persists Claude config and credentials across sessions)
 - The caller's current working directory → the same path inside the pod (the project to work on), which is also the pod's working directory
 
-With `--cic-feature <NAME>`, the working directory is instead a dedicated clone of the current git repo's `origin`, created at `~/.claude/cic-features/<REPO>/<NAME>` (where `<REPO>` is the repository name derived from the `origin` URL, independent of the local clone's directory name). The clone persists and is reused when the same `<NAME>` is passed again, giving each feature an isolated checkout (a worktree-like workflow using independent clones). It can be run from any subdirectory of the clone and requires an `origin` remote.
+With `--cic-feature <NAME>`, the working directory is instead a dedicated clone of the current git repo's `origin`, created at `<repo-root>/.claude/cic-features/<NAME>` within the current repository. The clone persists and is reused when the same `<NAME>` is passed again, giving each feature an isolated checkout (a worktree-like workflow using independent clones). The `.claude/cic-features` directory is automatically added to `.git/info/exclude` to prevent feature clones from appearing in git status. It can be run from any subdirectory of the clone and requires an `origin` remote.
 
 Host services are reachable at `host.docker.internal`. Since egress control is active in the `claude` namespace, `localhost` refers to the pod's own loopback and cannot be used to reach host services — use `host.docker.internal` instead. When the session ends, a trap deletes the pod automatically.
 

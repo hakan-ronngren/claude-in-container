@@ -106,7 +106,7 @@ fi
 
 # With --cic-feature <NAME>, work in a dedicated clone of the current repo's
 # 'origin' instead of the current directory. The clone lives at
-# ~/.claude/cic-features/<REPO>/<NAME> and persists across sessions, so the
+# <repo-root>/.claude/cic-features/<NAME> and persists across sessions, so the
 # same feature can be re-entered later by passing the same NAME.
 if [ -n "$CIC_FEATURE" ]; then
     if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || [ -z "$REPO_ROOT" ]; then
@@ -117,12 +117,17 @@ if [ -n "$CIC_FEATURE" ]; then
         echo "ERROR: repository at '$REPO_ROOT' has no 'origin' remote to clone from." >&2
         exit 1
     fi
-    # Derive a canonical repo name from the remote URL (independent of the local
-    # directory name): strip any trailing slash, take the last path segment, drop .git.
-    REPO_NAME="${ORIGIN_URL%/}"
-    REPO_NAME="${REPO_NAME##*[:/]}"
-    REPO_NAME="${REPO_NAME%.git}"
-    FEATURE_DIR="$HOME/.claude/cic-features/$REPO_NAME/$CIC_FEATURE"
+
+    # Ensure .claude/cic-features directory exists in the repo root
+    mkdir -p "$REPO_ROOT/.claude/cic-features"
+
+    # Ensure .claude/cic-features is in .git/info/exclude
+    EXCLUDE_FILE="$REPO_ROOT/.git/info/exclude"
+    if ! grep -qx '\.claude/cic-features' "$EXCLUDE_FILE" 2>/dev/null; then
+        echo ".claude/cic-features" >> "$EXCLUDE_FILE"
+    fi
+
+    FEATURE_DIR="$REPO_ROOT/.claude/cic-features/$CIC_FEATURE"
     if [ -d "$FEATURE_DIR" ]; then
         echo "Reusing existing feature clone at $FEATURE_DIR"
         # Switch to or create the branch matching the feature name
@@ -134,8 +139,7 @@ if [ -n "$CIC_FEATURE" ]; then
             git -C "$FEATURE_DIR" checkout -b "$CIC_FEATURE"
         fi
     else
-        echo "Creating feature clone '$CIC_FEATURE' for '$REPO_NAME' at $FEATURE_DIR ..."
-        mkdir -p "$(dirname "$FEATURE_DIR")"
+        echo "Creating feature clone '$CIC_FEATURE' at $FEATURE_DIR ..."
         git clone "$ORIGIN_URL" "$FEATURE_DIR"
 
         # Create and switch to the feature branch

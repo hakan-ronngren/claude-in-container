@@ -318,9 +318,9 @@ printf '\033[2mCreating pod...\033[0m\n'
 ${KUBECTL} wait --for=condition=Ready pod/"$POD_NAME" -n "$NAMESPACE" --timeout=60s >/dev/null
 
 if $INSECURE; then
-    printf '\033[33m⚠ Egress unrestricted — running in claude-insecure namespace.\033[0m\n'
+    printf '\033[33m⚠ Outgoing network traffic unrestricted.\033[0m\n'
 else
-    printf '\033[33mEgress control active — see README on how to detect and allowlist blocked traffic.\033[0m\n'
+    printf '\033[33mNetwork traffic control active — see https://github.com/hakan-ronngren/claude-in-container/blob/main/README.md on how to detect and allowlist blocked traffic.\033[0m\n'
 fi
 
 CLAUDE_BIN=/home/claude/.local/bin/claude

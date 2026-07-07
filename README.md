@@ -17,6 +17,24 @@ Run Claude Code in a sandbox that can't touch your home directory or reach the w
   - Kubernetes enabled (Preferences → Kubernetes)
 - [Istio](https://istio.io/) installed in your Rancher Desktop cluster (see [Egress control](#egress-control) below)
 
+### Set up Istio
+
+```bash
+# 1. Point at the Rancher Desktop cluster
+kubectl config use-context rancher-desktop
+
+# 2. Install Istio control plane in sidecar mode (default profile = sidecar-based)
+istioctl install --set profile=default -y
+
+# 3. Verify the control plane is healthy
+kubectl get pods -n istio-system
+
+# 4. Create the claude namespace + egress manifests
+#    (this is what claude-in-container/update-claude-container-egress normally does automatically,
+#    but running it once now confirms Istio is wired up correctly)
+update-claude-container-egress
+```
+
 ## Install
 
 1. Clone this repository in your home directory

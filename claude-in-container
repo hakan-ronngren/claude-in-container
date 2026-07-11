@@ -20,14 +20,18 @@ CLAUDE_HOME_DIR="$HOME/.local/share/claude-in-container/home"
 PROJECT_DIR="$(pwd)"
 
 # Seed a freshly created clone (feature_dir) from the host working copy
-# (repo_root) using .worktreeinclude (.gitignore-style syntax). Since the clone
-# comes from 'origin', untracked local files (e.g. .env, caches, build output)
-# and any uncommitted edits are absent otherwise — this is the worktree-equivalent
-# copy step, except the container can never reach the host clone, so what isn't
-# copied stays invisible to it. '*' matches within a path segment, '**' across
-# segments (requires bash globstar, hence bash >= 4); each pattern is anchored to
-# the repo root, so use '**/' to match at any depth. '#' comments and blank lines
-# are ignored.
+# (repo_root) using .worktreeinclude, which uses .gitignore pattern syntax (the
+# same file Claude Code's git worktrees support). Since the clone comes from
+# 'origin', untracked local files (e.g. .env, caches, build output) and any
+# uncommitted edits are absent otherwise — this is the worktree-equivalent copy
+# step, except the container can never reach the host clone, so what isn't copied
+# stays invisible to it. Supported .gitignore rules: a slashless pattern matches
+# at any depth while a leading or embedded slash anchors to the repo root; a
+# trailing slash matches directories only; a leading '!' negates, carving matches
+# back out with last-match-wins precedence; a leading backslash escapes '#' or
+# '!' and a trailing '\ ' keeps an otherwise-trimmed space; '*' matches within a
+# path segment and '**' across segments (globstar needs bash >= 4); '#' comments
+# and blank lines are ignored.
 seed_worktree_include() {
     local repo_root="$1" feature_dir="$2"
     local worktree_include="$repo_root/.worktreeinclude"
@@ -35,29 +39,63 @@ seed_worktree_include() {
     (
         cd "$repo_root"
         shopt -s globstar dotglob nullglob
-        local matches=() pattern match
+        # IFS='' keeps a pattern that contains a literal space as a single glob
+        # word; nothing below relies on word splitting ('read' sets its own IFS).
+        IFS=''
+        local -A selected=()
+        local pattern stripped match negate anchored dir_only
         while IFS= read -r pattern || [ -n "$pattern" ]; do
             pattern="${pattern%$'\r'}"                        # strip CR (CRLF files)
             pattern="${pattern#"${pattern%%[![:space:]]*}"}"  # trim leading whitespace
-            pattern="${pattern%"${pattern##*[![:space:]]}"}"  # trim trailing whitespace
-            if [ -z "$pattern" ] || [ "${pattern:0:1}" = "#" ]; then
-                continue
+            # Trim trailing whitespace, but keep a backslash-escaped trailing space.
+            stripped="${pattern%"${pattern##*[![:space:]]}"}"
+            if [[ "$stripped" =~ (\\+)$ ]] && (( ${#BASH_REMATCH[1]} % 2 == 1 )); then
+                pattern="${stripped%\\} "                     # '\<space>' keeps one space
+            else
+                pattern="$stripped"
             fi
-            pattern="${pattern#/}"                            # patterns are root-anchored already
-            pattern="${pattern%/}"                            # trailing slash (dir) — copy the dir
+            [ -z "$pattern" ] && continue
+            # Comment / negation, honoring a leading backslash escape of '#' or '!'.
+            negate=false
+            case "$pattern" in
+                '#'*)  continue ;;                            # comment line
+                '!'*)  negate=true; pattern="${pattern#!}" ;; # negation: carve matches out
+                '\#'* | '\!'*) pattern="${pattern#\\}" ;;     # escaped: literal '#' / '!'
+            esac
+            # gitignore anchoring: a slash anywhere but a trailing one anchors the
+            # pattern to the repo root; a slashless pattern matches at any depth.
+            anchored=false dir_only=false
+            if [ "${pattern:0:1}" = "/" ]; then
+                anchored=true
+                pattern="${pattern#/}"
+            fi
+            if [ "${pattern: -1}" = "/" ]; then
+                dir_only=true                                 # trailing slash: directories only
+                pattern="${pattern%/}"
+            fi
+            [ -z "$pattern" ] && continue
+            case "$pattern" in */*) anchored=true ;; esac
+            $anchored || pattern="**/$pattern"
             for match in $pattern; do
                 if [ ! -e "$match" ] || [ "$match" = ".git" ]; then
                     continue
                 fi
                 case "$match" in .git/*) continue ;; esac
-                matches+=("$match")
+                if $dir_only && [ ! -d "$match" ]; then
+                    continue                                  # trailing-slash pattern skips files
+                fi
+                if $negate; then
+                    unset "selected[$match]"                  # last match wins
+                else
+                    selected["$match"]=1
+                fi
             done
         done < .worktreeinclude
-        if [ ${#matches[@]} -gt 0 ]; then
+        if [ ${#selected[@]} -gt 0 ]; then
             # tar preserves the relative paths and merges into the clone
             # (overwriting tracked files, never nesting directories).
-            tar -cf - "${matches[@]}" | tar -C "$feature_dir" -xpf -
-            printf 'Applied .worktreeinclude: copied %d path(s) into the clone\n' "${#matches[@]}"
+            tar -cf - "${!selected[@]}" | tar -C "$feature_dir" -xpf -
+            printf 'Applied .worktreeinclude: copied %d path(s) into the clone\n' "${#selected[@]}"
         fi
     )
 }

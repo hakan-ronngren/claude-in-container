@@ -4,8 +4,11 @@
 #
 # It drives the script's internal seeding hook (--cic-internal-seed) directly,
 # so it exercises the real code under the script's real shebang without needing
-# a Kubernetes cluster. Covers: dotfiles, '**' globstar across path segments,
-# comment/blank-line skipping, and .git exclusion.
+# a Kubernetes cluster. Covers the .gitignore syntax rules .worktreeinclude
+# promises: dotfiles, slashless patterns matching at any depth, '**' globstar,
+# leading-'/' and embedded-slash anchoring, trailing-slash directory-only
+# matching, '!' negation (last match wins), backslash escaping of '#' / '!' and
+# a trailing space, comment/blank-line skipping, and .git exclusion.
 
 set -euo pipefail
 
@@ -17,31 +20,95 @@ trap 'rm -rf "$WORK"' EXIT
 
 REPO_ROOT="$WORK/source"
 FEATURE_DIR="$WORK/clone"
-mkdir -p "$REPO_ROOT/config" "$REPO_ROOT/.git" "$FEATURE_DIR"
+mkdir -p "$REPO_ROOT/config" "$REPO_ROOT/functions" "$REPO_ROOT/sub/config" \
+         "$REPO_ROOT/a/stuff" "$REPO_ROOT/b" "$REPO_ROOT/.git" "$FEATURE_DIR"
 
 # Untracked / local files the worktree-equivalent copy must carry over.
 printf 'SECRET=1\n'      > "$REPO_ROOT/.env"
+printf 'root-local\n'    > "$REPO_ROOT/.env.local"
+printf 'nested-local\n'  > "$REPO_ROOT/functions/.env.local"
 printf 'nested-secret\n' > "$REPO_ROOT/config/secret.local"
 printf 'do-not-copy\n'   > "$REPO_ROOT/config/keep.txt"
+printf 'anchored\n'      > "$REPO_ROOT/config/anchored.txt"
+printf 'not-anchored\n'  > "$REPO_ROOT/sub/config/anchored.txt"
+printf 'root-anchor\n'   > "$REPO_ROOT/rooted.txt"
+printf 'nested-same\n'   > "$REPO_ROOT/config/rooted.txt"
+printf 'in-a-dir\n'      > "$REPO_ROOT/a/stuff/inside.txt"
+printf 'a-file\n'        > "$REPO_ROOT/b/stuff"
+printf 'literal-hash\n'  > "$REPO_ROOT/#hash.txt"
+printf 'literal-bang\n'  > "$REPO_ROOT/!bang.txt"
+printf 'trailing-space\n'> "$REPO_ROOT/trail "
 printf 'git-internal\n'  > "$REPO_ROOT/.git/should-not-copy"
 
 cat > "$REPO_ROOT/.worktreeinclude" <<'EOF'
-# carry the local env file and any *.local at any depth
+# slashless patterns match at any depth, gitignore-style
 
 .env
+.env.local
+# globstar still works across path segments
 **/*.local
+# an embedded slash anchors to the repo root
+config/anchored.txt
+# a leading slash also anchors to the repo root
+/rooted.txt
+# a trailing slash matches directories only, never a same-named file
+stuff/
+# a leading backslash escapes '#' / '!' so they are matched literally
+\#hash.txt
+\!bang.txt
 EOF
+# A backslash-escaped trailing space must be preserved (heredocs make trailing
+# whitespace invisible, so write this line explicitly): pattern is 'trail\ '.
+printf 'trail\\ \n' >> "$REPO_ROOT/.worktreeinclude"
+# The '!functions/.env.local' carve-out is placed LAST, after the includes that
+# match it, so it demonstrates gitignore's last-match-wins negation rule.
+printf '!functions/.env.local\n' >> "$REPO_ROOT/.worktreeinclude"
 
 "$CIC" --cic-internal-seed "$REPO_ROOT" "$FEATURE_DIR"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
+# --- slashless / depth ---
 [ -f "$FEATURE_DIR/.env" ] \
     || fail ".env (dotfile) was not copied into the clone"
 grep -q 'SECRET=1' "$FEATURE_DIR/.env" \
     || fail ".env contents not preserved"
+[ -f "$FEATURE_DIR/.env.local" ] \
+    || fail "slashless .env.local did not match the root-level file"
 [ -f "$FEATURE_DIR/config/secret.local" ] \
     || fail "**/*.local (globstar across segments) did not match config/secret.local"
+
+# --- negation (last match wins) ---
+[ ! -e "$FEATURE_DIR/functions/.env.local" ] \
+    || fail "!functions/.env.local negation did not carve out the nested file"
+
+# --- embedded-slash anchoring ---
+[ -f "$FEATURE_DIR/config/anchored.txt" ] \
+    || fail "anchored config/anchored.txt was not copied"
+[ ! -e "$FEATURE_DIR/sub/config/anchored.txt" ] \
+    || fail "config/anchored.txt (slash-anchored) wrongly matched sub/config/anchored.txt"
+
+# --- leading-slash anchoring ---
+[ -f "$FEATURE_DIR/rooted.txt" ] \
+    || fail "/rooted.txt (leading-slash anchor) was not copied"
+[ ! -e "$FEATURE_DIR/config/rooted.txt" ] \
+    || fail "/rooted.txt (anchored) wrongly matched config/rooted.txt at depth"
+
+# --- trailing slash: directories only ---
+[ -f "$FEATURE_DIR/a/stuff/inside.txt" ] \
+    || fail "stuff/ (trailing slash) did not copy the matching directory"
+[ ! -e "$FEATURE_DIR/b/stuff" ] \
+    || fail "stuff/ (directory-only) wrongly matched the file b/stuff"
+
+# --- backslash escaping ---
+[ -f "$FEATURE_DIR/#hash.txt" ] \
+    || fail "\\#hash.txt was not treated as a literal '#' pattern"
+[ -f "$FEATURE_DIR/!bang.txt" ] \
+    || fail "\\!bang.txt was not treated as a literal '!' pattern"
+[ -f "$FEATURE_DIR/trail " ] \
+    || fail "trailing backslash-space was not preserved to match 'trail '"
+
+# --- exclusions ---
 [ ! -e "$FEATURE_DIR/config/keep.txt" ] \
     || fail "config/keep.txt was copied but no pattern selected it"
 [ ! -e "$FEATURE_DIR/.git" ] \

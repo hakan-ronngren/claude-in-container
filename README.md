@@ -141,6 +141,36 @@ will be trusted automatically.
 Because the clone is made from `origin`, the repository must have an `origin` remote,
 and uncommitted or unpushed local changes in your working copy are not carried over.
 
+#### Seeding local files — `.worktreeinclude`
+
+Since the clone comes from `origin`, untracked local files (`.env`, caches, build
+output, and similar) are absent from it. To copy some of them into the fresh clone,
+add a `.worktreeinclude` file at your repository root listing the paths to carry over.
+It uses [`.gitignore` pattern syntax](https://git-scm.com/docs/gitignore): slashless
+patterns match at any depth, a leading or embedded slash anchors to the repository
+root, a trailing slash matches directories only, `!` negates (last match wins), and a
+leading backslash escapes `#`, `!`, or a trailing space.
+
+```
+.env
+.env.local
+config/secrets.json
+```
+
+**Known limitation:** negation cannot carve a file out of a directory that was matched
+as a whole. Given
+
+```
+cache/
+!cache/secret.env
+```
+
+the entire `cache/` directory is copied, `secret.env` included — the directory is
+copied as a unit, so the `!cache/secret.env` exception has nothing to remove. Negation
+only works against files selected individually (e.g. `cache/*` plus `!cache/secret.env`).
+This mirrors git's own rule that a file cannot be re-included once its parent directory
+is excluded.
+
 ### Resuming sessions
 
 When you exit Claude, it prints a message like:

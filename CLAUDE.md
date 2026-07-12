@@ -22,6 +22,7 @@ The pod mounts:
 
 - `~/.local/share/claude-in-container/home` → `/home/claude` (persists Claude config and credentials across sessions)
 - The caller's current working directory → the same path inside the pod (the project to work on), which is also the pod's working directory
+- `~/.config/gcloud/application_default_credentials.json` → the same path under `/home/claude`, **read-only**, mounted automatically only when the host file exists — lets in-container Vertex AI / Genkit flows authenticate without installing `gcloud`
 
 With `--cic-feature <NAME>`, the working directory is instead a dedicated clone of the current git repo's `origin`, created at `<repo-root>/.claude/cic-features/<NAME>` within the current repository. The clone persists and is reused when the same `<NAME>` is passed again, giving each feature an isolated checkout (a worktree-like workflow using independent clones). The `.claude/cic-features` directory is automatically added to `.git/info/exclude` to prevent feature clones from appearing in git status. It can be run from any subdirectory of the clone and requires an `origin` remote.
 

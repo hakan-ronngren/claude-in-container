@@ -92,8 +92,11 @@ seed_worktree_include() {
             done
         done < .worktreeinclude
         if [ ${#selected[@]} -gt 0 ]; then
-            # tar preserves the relative paths and merges into the clone
-            # (overwriting tracked files, never nesting directories).
+            # tar preserves the relative paths, file modes and modification
+            # times (like 'cp -p') as it merges into the clone, overwriting
+            # tracked files and never nesting directories. Keep the mtime
+            # guarantee if this is ever rewritten: a plain 'cp' would reset
+            # dates, so use 'cp -p' / 'cp --preserve' instead.
             tar -cf - "${!selected[@]}" | tar -C "$feature_dir" -xpf -
             printf 'Applied .worktreeinclude: copied %d path(s) into the clone\n' "${#selected[@]}"
         fi
@@ -282,6 +285,20 @@ if [ -f "$MOUNTS_FILE" ]; then
         EXTRA_VOLUMES+="    - name: $VOL_NAME"$'\n'"      hostPath:"$'\n'"        path: $HOST_PATH"$'\n'"        type: $PATH_TYPE"$'\n'
         MOUNT_IDX=$((MOUNT_IDX + 1))
     done < "$MOUNTS_FILE"
+fi
+
+# Mount the host's Application Default Credentials read-only so in-container
+# Vertex AI / Genkit flows can authenticate without needing gcloud installed.
+# The host file (written by `gcloud auth` / `npm run gcp:login`) carries an
+# OAuth refresh token, so mount only this single file and always read-only.
+# It nests inside the claude-home volume; kubelet mounts the parent first and
+# creates the target, so the nested hostPath mount resolves correctly.
+ADC_HOST_FILE="$HOME/.config/gcloud/application_default_credentials.json"
+ADC_CONTAINER_FILE="/home/claude/.config/gcloud/application_default_credentials.json"
+if [ -f "$ADC_HOST_FILE" ]; then
+    EXTRA_VOLUME_MOUNTS+="        - name: gcloud-adc"$'\n'"          mountPath: $ADC_CONTAINER_FILE"$'\n'"          readOnly: true"$'\n'
+    EXTRA_VOLUMES+="    - name: gcloud-adc"$'\n'"      hostPath:"$'\n'"        path: $ADC_HOST_FILE"$'\n'"        type: File"$'\n'
+    printf '\033[2mMounting gcloud application default credentials (read-only) for Vertex AI.\033[0m\n'
 fi
 
 trap "${KUBECTL} delete pod $POD_NAME -n $NAMESPACE --ignore-not-found --grace-period=2 >/dev/null 2>&1" EXIT

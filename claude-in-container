@@ -190,6 +190,19 @@ if [ -n "$CIC_FEATURE" ]; then
         seed_worktree_include "$REPO_ROOT" "$FEATURE_DIR"
     fi
     PROJECT_DIR="$FEATURE_DIR"
+
+    # Name the claude session after the feature so multiple concurrent sessions
+    # are easy to tell apart, unless the caller already passed their own --name.
+    has_name=false
+    for arg in "${CLAUDE_ARGS[@]}"; do
+        if [ "$arg" = "--name" ]; then
+            has_name=true
+            break
+        fi
+    done
+    if ! $has_name; then
+        CLAUDE_ARGS+=(--name "$CIC_FEATURE")
+    fi
 fi
 
 # Check that the image has been built

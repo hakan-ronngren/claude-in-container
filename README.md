@@ -131,6 +131,10 @@ cloning again — letting you re-enter a feature workspace later. This keeps eac
 of work fully isolated in its own checkout, similar to `git worktree` but as
 independent clones.
 
+The session is also named after the feature: `--cic-feature <NAME>` passes
+`--name <NAME>` through to `claude`, so concurrent sessions are easy to tell apart.
+If you supply your own `--name`, that one is used instead.
+
 The `.claude/cic-features` directory is automatically added to `.git/info/exclude`,
 so feature clones don't appear in `git status`. Since feature clones are subdirectories
 of the main repository, they inherit trust from the parent — **as long as you've run
@@ -196,15 +200,10 @@ The pod always runs with `hostNetwork: false`, so `localhost` refers to the pod'
 
 `claude-in-container` runs pods in one of two Kubernetes namespaces depending on the session type:
 
-| Mode | Namespace | Egress |
-|---|---|---|
-| Default | `claude` | Restricted to an explicit allowlist via Istio |
-| Unrestricted | `claude-insecure` | No restrictions |
-
-```bash
-claude-in-container            # controlled egress
-claude-in-container --cic-insecure # unrestricted egress
-```
+|     Mode     |     Namespace     |                     Egress                    |
+|--------------|-------------------|-----------------------------------------------|
+| Default      | `claude`          | Restricted to an explicit allowlist via Istio |
+| Unrestricted | `claude-insecure` | No restrictions                               |
 
 Use `--cic-insecure` when you need broad web access, such as open research sessions.
 

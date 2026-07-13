@@ -59,6 +59,21 @@ RUN apt-get update \
 # firebase-tools held back to stay compatible with an obsolete Java.
 RUN npm install -g firebase-tools
 
+# Google Cloud CLI (gcloud) from Google's official apt repo, so in-container
+# flows can authenticate and call Google Cloud / Vertex AI. Building fetches
+# from packages.cloud.google.com — allow that egress if the build environment
+# is restricted (the runtime pod's egress rules don't apply during docker build).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends apt-transport-https ca-certificates gnupg curl \
+    && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+         | gpg --dearmor -o /etc/apt/keyrings/cloud.google.gpg \
+    && chmod go+r /etc/apt/keyrings/cloud.google.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+         > /etc/apt/sources.list.d/google-cloud-sdk.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends google-cloud-cli \
+    && rm -rf /var/lib/apt/lists/*
+
 # Create user 'claude' with passwordless sudo
 RUN useradd -m -s /bin/bash claude \
     && echo 'claude ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/claude
